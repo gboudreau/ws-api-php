@@ -149,20 +149,22 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         );
     }
 
-    public function getActivities(string $account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE): array {
+    public function getActivities(string $account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $startDate = NULL, string $endDate = NULL): array {
         $activities = $this->doGraphQLQuery(
             'FetchActivityFeedItems',
             [
                 'orderBy' => $order_by,
                 'first'   => $how_many,
                 'condition' => [
-                    'endDate'    => date('Y-m-d\TH:i:s.999\Z', strtotime('+1 day')),
+                    'startDate'  => $startDate ? date('Y-m-d\TH:i:s.999\Z', strtotime($startDate)) : NULL,
+                    'endDate'    => date('Y-m-d\TH:i:s.999\Z', $endDate ? strtotime($endDate) : strtotime('+1 day')),
                     'accountIds' => [$account_id],
                 ],
             ],
             'activityFeedItems.edges',
             'array',
             fn($act) => $act->type != 'LEGACY_TRANSFER' && (!$ignore_rejected || empty($act->status) || (!string_contains($act->status, 'rejected') && !string_contains($act->status, 'cancelled'))),
+            LOAD_ALL_PAGES
         );
         array_walk($activities, fn($act) => $this->_activityAddDescription($act));
         return $activities;
