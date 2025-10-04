@@ -86,6 +86,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $account->description = "Crypto";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_RRIF') {
             $account->description = "RRIF: self-directed - $account->currency";
+        } elseif ($account->unifiedAccountType === 'CREDIT_CARD') {
+            $account->description = "Credit card";
         }
         // @TODO Add other types
     }
@@ -248,6 +250,19 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $act->description = "Promotion: $subtype";
         } elseif ($act->type === 'REFERRAL') {
             $act->description = "Referral";
+        } elseif ($act->type === 'CREDIT_CARD' && $act->subType === 'PURCHASE') {
+            $merchant = $act->spendMerchant;
+            $status = $act->status === 'authorized' ? '(Pending) ' : ''; // Posted purchase transactions have status = settled
+            $act->description = "{$status}Credit card purchase: $merchant";
+        } elseif ($act->type === 'CREDIT_CARD' && $act->subType === 'HOLD') {
+            $merchant = $act->spendMerchant;
+            $status = $act->status === 'authorized' ? '(Pending) ' : ''; // Posted return transactions have subType = REFUND and status = settled
+            $act->description = "{$status}Credit card refund: $merchant";
+        } elseif ($act->type === 'CREDIT_CARD' && $act->subType === 'REFUND') {
+            $merchant = $act->spendMerchant;
+            $act->description = "Credit card refund: $merchant";
+        } elseif ($act->type === 'CREDIT_CARD' && $act->subType === 'PAYMENT') {
+            $act->description = "Credit card payment";
         }
         // @TODO Add other types
     }
