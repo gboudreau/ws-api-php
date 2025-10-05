@@ -197,6 +197,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             } else {
                 $act->description = "$verb: $action " . ((float) $act->assetQuantity) . " x $security @ " . ($act->amount / $act->assetQuantity);
             }
+        } elseif ($act->type === 'CORPORATE_ACTION' && $act->subType === 'SUBDIVISION') {
+            $act->description = "Subdivision: Received $act->amount shares of $act->assetSymbol";
         } elseif (($act->type === 'DEPOSIT' || $act->type === 'WITHDRAWAL') && ($act->subType === 'E_TRANSFER' || $act->subType === 'E_TRANSFER_FUNDING')) {
             $direction = $act->type === 'WITHDRAWAL' ? 'to' : 'from';
             $act->description = ucfirst(strtolower($act->type)) . ": Interac e-transfer $direction $act->eTransferName $act->eTransferEmail";

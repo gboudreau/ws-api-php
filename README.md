@@ -135,7 +135,11 @@ foreach ($accounts as $account) {
         if ($act->type === 'DIY_BUY') {
             $act->amountSign = 'negative';
         }
-        echo "  - [" . date("Y-m-d H:i:s", strtotime($act->occurredAt)) . "] [$act->canonicalId] $act->description = " . ($act->amountSign === 'positive' ? "+" : "-") . "$act->amount $act->currency\n";
+        echo "  - [" . date("Y-m-d H:i:s", strtotime($act->occurredAt)) . "] [$act->canonicalId] $act->description";
+        if ($act->currency) {
+            echo " = " . ($act->amountSign === 'positive' ? "+" : "-") . "$act->amount $act->currency";
+        }
+        echo "\n";
         if ($act->description === "$act->type: $act->subType") {
             // This is an "unknown" transaction, for which description is generic; please open an issue on https://github.com/gboudreau/ws-api-php/issues and include the following:
             echo "    Unknown activity: " . json_encode($act) . "\n";
