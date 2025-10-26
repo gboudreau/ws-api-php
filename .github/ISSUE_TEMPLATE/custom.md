@@ -1,6 +1,7 @@
 ---
 name: Custom issue template
-about: To provide simple guidance when the user issue might contain sensitive information.
+about: Please always use this template. It provides some guidance about anonymizing
+  sensitive information.
 title: ''
 labels: ''
 assignees: ''
