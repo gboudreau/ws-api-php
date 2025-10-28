@@ -154,7 +154,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         );
     }
 
-    public function getActivities(string $account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $startDate = NULL, string $endDate = NULL): array {
+    public function getActivities(string $account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $startDate = NULL, string $endDate = NULL, $load_all_pages = TRUE): array {
         $activities = $this->doGraphQLQuery(
             'FetchActivityFeedItems',
             [
@@ -169,7 +169,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             'activityFeedItems.edges',
             'array',
             fn($act) => $act->type != 'LEGACY_TRANSFER' && (!$ignore_rejected || empty($act->status) || (!string_contains($act->status, 'rejected') && !string_contains($act->status, 'cancelled'))),
-            LOAD_ALL_PAGES
+            $load_all_pages
         );
         array_walk($activities, fn($act) => $this->_activityAddDescription($act));
         return $activities;
