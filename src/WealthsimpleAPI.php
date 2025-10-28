@@ -24,6 +24,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         case 'FetchAccountHistoricalFinancials': return "query FetchAccountHistoricalFinancials(\$id: ID!, \$currency: Currency!, \$startDate: Date, \$resolution: DateResolution!, \$endDate: Date, \$first: Int, \$cursor: String) {\n          account(id: \$id) {\n            id\n            financials {\n              historicalDaily(\n                currency: \$currency\n                startDate: \$startDate\n                resolution: \$resolution\n                endDate: \$endDate\n                first: \$first\n                after: \$cursor\n              ) {\n                edges {\n                  node {\n                    ...AccountHistoricalFinancials\n                    __typename\n                  }\n                  __typename\n                }\n                pageInfo {\n                  hasNextPage\n                  endCursor\n                  __typename\n                }\n                __typename\n              }\n              __typename\n            }\n            __typename\n          }\n        }\n\n        fragment AccountHistoricalFinancials on AccountHistoricalDailyFinancials {\n          date\n          netLiquidationValueV2 {\n            ...Money\n            __typename\n          }\n          netDepositsV2 {\n            ...Money\n            __typename\n          }\n          __typename\n        }\n\n        fragment Money on Money {\n          amount\n          cents\n          currency\n          __typename\n        }";
         case 'FetchAllAccounts': return "query FetchAllAccounts(\$identityId: ID!, \$filter: AccountsFilter = {}, \$pageSize: Int = 25, \$cursor: String) {\n  identity(id: \$identityId) {\n id\n ...AllAccounts\n __typename\n  }\n}\n\nfragment AllAccounts on Identity {\n  accounts(filter: \$filter, first: \$pageSize, after: \$cursor) {\n pageInfo {\n   hasNextPage\n   endCursor\n   __typename\n }\n edges {\n   cursor\n   node {\n  ...AccountWithLink\n  __typename\n   }\n   __typename\n }\n __typename\n  }\n  __typename\n}\n\nfragment AccountWithLink on Account {\n  ...Account\n  linkedAccount {\n ...Account\n __typename\n  }\n  __typename\n}\n\nfragment Account on Account {\n  ...AccountCore\n  custodianAccounts {\n ...CustodianAccount\n __typename\n  }\n  __typename\n}\n\nfragment AccountCore on Account {\n  id\n  archivedAt\n  branch\n  closedAt\n  createdAt\n  cacheExpiredAt\n  currency\n  requiredIdentityVerification\n  unifiedAccountType\n  supportedCurrencies\n  compatibleCurrencies\n  nickname\n  status\n  accountOwnerConfiguration\n  accountFeatures {\n ...AccountFeature\n __typename\n  }\n  accountOwners {\n ...AccountOwner\n __typename\n  }\n  accountEntityRelationships {\n ...AccountEntityRelationship\n __typename\n  }\n  accountUpgradeProcesses {\n ...AccountUpgradeProcess\n __typename\n  }\n  type\n  __typename\n}\n\nfragment AccountFeature on AccountFeature {\n  name\n  enabled\n  functional\n  firstEnabledOn\n  __typename\n}\n\nfragment AccountOwner on AccountOwner {\n  accountId\n  identityId\n  accountNickname\n  clientCanonicalId\n  accountOpeningAgreementsSigned\n  name\n  email\n  ownershipType\n  activeInvitation {\n ...AccountOwnerInvitation\n __typename\n  }\n  sentInvitations {\n ...AccountOwnerInvitation\n __typename\n  }\n  __typename\n}\n\nfragment AccountOwnerInvitation on AccountOwnerInvitation {\n  id\n  createdAt\n  inviteeName\n  inviteeEmail\n  inviterName\n  inviterEmail\n  updatedAt\n  sentAt\n  status\n  __typename\n}\n\nfragment AccountEntityRelationship on AccountEntityRelationship {\n  accountCanonicalId\n  entityCanonicalId\n  entityOwnershipType\n  entityType\n  __typename\n}\n\nfragment AccountUpgradeProcess on AccountUpgradeProcess {\n  canonicalId\n  status\n  targetAccountType\n  __typename\n}\n\nfragment CustodianAccount on CustodianAccount {\n  id\n  branch\n  custodian\n  status\n  updatedAt\n  __typename\n}";
         case 'FetchIdentityHistoricalFinancials': return "query FetchIdentityHistoricalFinancials(\$identityId: ID!, \$currency: Currency!, \$startDate: Date, \$endDate: Date, \$first: Int, \$cursor: String, \$accountIds: [ID!]) {\n      identity(id: \$identityId) {\n        id\n        financials(filter: {accounts: \$accountIds}) {\n          historicalDaily(\n            currency: \$currency\n            startDate: \$startDate\n            endDate: \$endDate\n            first: \$first\n            after: \$cursor\n          ) {\n            edges {\n              node {\n                ...IdentityHistoricalFinancials\n                __typename\n              }\n              __typename\n            }\n            pageInfo {\n              hasNextPage\n              endCursor\n              __typename\n            }\n            __typename\n          }\n          __typename\n        }\n        __typename\n      }\n    }\n\n    fragment IdentityHistoricalFinancials on IdentityHistoricalDailyFinancials {\n      date\n      netLiquidationValueV2 {\n        amount\n        currency\n        __typename\n      }\n      netDepositsV2 {\n        amount\n        currency\n        __typename\n      }\n      __typename\n    }";
+        case 'FetchCorporateActionChildActivities': return "query FetchCorporateActionChildActivities(\$activityCanonicalId: String!) {\n  corporateActionChildActivities(\n    condition: {activityCanonicalId: \$activityCanonicalId}\n  ) {\n    nodes {\n      ...CorporateActionChildActivity\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CorporateActionChildActivity on CorporateActionChildActivity {\n  canonicalId\n  activityCanonicalId\n  assetName\n  assetSymbol\n  assetType\n  entitlementType\n  quantity\n  currency\n  price\n  recordDate\n  __typename\n}";
         };
     }
 
@@ -198,7 +199,14 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 $act->description = "$verb: $action " . ((float) $act->assetQuantity) . " x $security @ " . ($act->amount / $act->assetQuantity);
             }
         } elseif ($act->type === 'CORPORATE_ACTION' && $act->subType === 'SUBDIVISION') {
-            $act->description = "Subdivision: Received $act->amount shares of $act->assetSymbol";
+            $child_activities = $this->getCorporateActionChildActivities($act->canonicalId);
+            $held_activity = current(array_filter($child_activities, fn ($corp_activity) => $corp_activity->entitlementType === 'HOLD'));
+            $receive_activity = current(array_filter($child_activities, fn ($corp_activity) => $corp_activity->entitlementType === 'RECEIVE'));
+            if ($held_activity && $receive_activity) {
+                $act->description = "Subdivision: {$held_activity->quantity} -> {$receive_activity->quantity} shares of {$act->assetSymbol}";
+            } else {
+                $act->description = "Subdivision: Received $act->amount shares of $act->assetSymbol";
+            }
         } elseif (($act->type === 'DEPOSIT' || $act->type === 'WITHDRAWAL') && ($act->subType === 'E_TRANSFER' || $act->subType === 'E_TRANSFER_FUNDING')) {
             $direction = $act->type === 'WITHDRAWAL' ? 'to' : 'from';
             $act->description = ucfirst(strtolower($act->type)) . ": Interac e-transfer $direction $act->eTransferName $act->eTransferEmail";
@@ -360,6 +368,25 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 'timerange' => $time_range,
             ],
             'security.historicalQuotes',
+            'array',
+        );
+    }
+
+    /**
+     * Get details about a corporation action (eg. a split)
+     *
+     * @param string $activity_canonical_id Wealthsimple activity ID
+     *
+     * @return object[]
+     * @throws WSApiException
+     */
+    public function getCorporateActionChildActivities(string $activity_canonical_id): array {
+        return $this->doGraphQLQuery(
+            'FetchCorporateActionChildActivities',
+            [
+                'activityCanonicalId' => $activity_canonical_id,
+            ],
+            'corporateActionChildActivities.nodes',
             'array',
         );
     }
