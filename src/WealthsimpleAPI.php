@@ -205,9 +205,13 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $held_activity = current(array_filter($child_activities, fn ($corp_activity) => $corp_activity->entitlementType === 'HOLD'));
             $receive_activity = current(array_filter($child_activities, fn ($corp_activity) => $corp_activity->entitlementType === 'RECEIVE'));
             if ($held_activity && $receive_activity) {
-                $act->description = "Subdivision: {$held_activity->quantity} -> {$receive_activity->quantity} shares of {$act->assetSymbol}";
+                $held_shares = (float) $held_activity->quantity;
+                $received_shares = (float) $receive_activity->quantity;
+                $total_shares = $held_shares + $received_shares;
+                $act->description = "Subdivision: $held_shares -> $total_shares shares of $act->assetSymbol";
             } else {
-                $act->description = "Subdivision: Received $act->amount shares of $act->assetSymbol";
+                $received_shares = (float) $act->amount;
+                $act->description = "Subdivision: Received $received_shares new shares of $act->assetSymbol";
             }
         } elseif (($act->type === 'DEPOSIT' || $act->type === 'WITHDRAWAL') && ($act->subType === 'E_TRANSFER' || $act->subType === 'E_TRANSFER_FUNDING')) {
             $direction = $act->type === 'WITHDRAWAL' ? 'to' : 'from';
