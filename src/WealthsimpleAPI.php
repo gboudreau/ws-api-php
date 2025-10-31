@@ -154,7 +154,22 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         );
     }
 
-    public function getActivities(string $account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $startDate = NULL, string $endDate = NULL, $load_all_pages = TRUE): array {
+    /**
+     * Retrieve activities for a specific account or list of accounts.
+     *
+     * @param string|string[] $account_id      The account ID or list of account IDs to retrieve activities for.
+     * @param int             $how_many        The maximum number of activities to retrieve.
+     * @param string          $order_by        The order in which to sort the activities.
+     * @param bool            $ignore_rejected Whether to ignore rejected or cancelled activities.
+     * @param string|NULL     $startDate       The start date for filtering activities.
+     * @param string|NULL     $endDate         The end date for filtering activities.
+     * @param bool            $load_all_pages  Whether to load all pages of activities.
+     *
+     * @return array A list of activity objects.
+     * @throws Exceptions\UnexpectedException
+     * @throws WSApiException If the response format is unexpected.
+     */
+    public function getActivities($account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $startDate = NULL, string $endDate = NULL, bool $load_all_pages = TRUE): array {
         $activities = $this->doGraphQLQuery(
             'FetchActivityFeedItems',
             [
@@ -163,7 +178,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 'condition' => [
                     'startDate'  => $startDate ? date('Y-m-d\TH:i:s.999\Z', strtotime($startDate)) : NULL,
                     'endDate'    => date('Y-m-d\TH:i:s.999\Z', $endDate ? strtotime($endDate) : strtotime('+1 day')),
-                    'accountIds' => [$account_id],
+                    'accountIds' => $account_id,
                 ],
             ],
             'activityFeedItems.edges',
@@ -285,6 +300,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 $program = "- Visa Infinite";
             }
             $act->description = trim("Cash back $program");
+        } elseif ($act->type === 'INSTITUTIONAL_TRANSFER_INTENT' && $act->subType === 'TRANSFER_OUT') {
+            $act->description = "Institutional transfer: transfer to $act->institutionName";
         }
         // @TODO Add other types
     }
