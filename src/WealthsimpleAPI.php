@@ -7,6 +7,9 @@ use PPFinances\Wealthsimple\Exceptions\WSApiException;
 function string_contains(?string $haystack, string $needle): bool {
     return stripos($haystack ?? '', $needle) !== FALSE;
 }
+function array_any(array $arr, callable $callable) {
+    return count(array_filter($arr, $callable)) > 0;
+}
 
 class WealthsimpleAPI extends WealthsimpleAPIBase
 {
@@ -170,6 +173,25 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
      * @throws WSApiException If the response format is unexpected.
      */
     public function getActivities($account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $startDate = NULL, string $endDate = NULL, bool $load_all_pages = TRUE): array {
+        $filter_fn = function ($act) use ($ignore_rejected) {
+            if ($act->type === 'LEGACY_TRANSFER') {
+                // Never return those
+                return FALSE;
+            }
+            if (empty($act->status)) {
+                // No status... What can we do!
+                return TRUE;
+            }
+            if (!$ignore_rejected) {
+                // User wants all transactions, including rejected
+                return TRUE;
+            }
+            $is_rejected = array_any(['rejected', 'cancelled', 'expired'], fn($s) => string_contains($act->status, $s));
+            if ($is_rejected) {
+                return FALSE;
+            }
+            return TRUE;
+        };
         $activities = $this->doGraphQLQuery(
             'FetchActivityFeedItems',
             [
@@ -183,7 +205,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             ],
             'activityFeedItems.edges',
             'array',
-            fn($act) => $act->type != 'LEGACY_TRANSFER' && (!$ignore_rejected || empty($act->status) || (!string_contains($act->status, 'rejected') && !string_contains($act->status, 'cancelled'))),
+            $filter_fn,
             $load_all_pages
         );
         array_walk($activities, fn($act) => $this->_activityAddDescription($act));
