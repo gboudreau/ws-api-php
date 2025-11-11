@@ -250,6 +250,12 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 $received_shares = (float) $act->amount;
                 $act->description = "Subdivision: Received $received_shares new shares of $act->assetSymbol";
             }
+            if (empty($act->currency)) {
+                $market_data = $this->getSecurityMarketData($act->securityId);
+                if (!empty($market_data->fundamentals->currency)) {
+                    $act->currency = $market_data->fundamentals->currency;
+                }
+            }
         } elseif (($act->type === 'DEPOSIT' || $act->type === 'WITHDRAWAL') && ($act->subType === 'E_TRANSFER' || $act->subType === 'E_TRANSFER_FUNDING')) {
             $direction = $act->type === 'WITHDRAWAL' ? 'to' : 'from';
             $act->description = ucfirst(strtolower($act->type)) . ": Interac e-transfer $direction $act->eTransferName $act->eTransferEmail";
