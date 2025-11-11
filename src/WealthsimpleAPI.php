@@ -28,6 +28,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         case 'FetchAllAccounts': return "query FetchAllAccounts(\$identityId: ID!, \$filter: AccountsFilter = {}, \$pageSize: Int = 25, \$cursor: String) {\n  identity(id: \$identityId) {\n id\n ...AllAccounts\n __typename\n  }\n}\n\nfragment AllAccounts on Identity {\n  accounts(filter: \$filter, first: \$pageSize, after: \$cursor) {\n pageInfo {\n   hasNextPage\n   endCursor\n   __typename\n }\n edges {\n   cursor\n   node {\n  ...AccountWithLink\n  __typename\n   }\n   __typename\n }\n __typename\n  }\n  __typename\n}\n\nfragment AccountWithLink on Account {\n  ...Account\n  linkedAccount {\n ...Account\n __typename\n  }\n  __typename\n}\n\nfragment Account on Account {\n  ...AccountCore\n  custodianAccounts {\n ...CustodianAccount\n __typename\n  }\n  __typename\n}\n\nfragment AccountCore on Account {\n  id\n  archivedAt\n  branch\n  closedAt\n  createdAt\n  cacheExpiredAt\n  currency\n  requiredIdentityVerification\n  unifiedAccountType\n  supportedCurrencies\n  compatibleCurrencies\n  nickname\n  status\n  accountOwnerConfiguration\n  accountFeatures {\n ...AccountFeature\n __typename\n  }\n  accountOwners {\n ...AccountOwner\n __typename\n  }\n  accountEntityRelationships {\n ...AccountEntityRelationship\n __typename\n  }\n  accountUpgradeProcesses {\n ...AccountUpgradeProcess\n __typename\n  }\n  type\n  __typename\n}\n\nfragment AccountFeature on AccountFeature {\n  name\n  enabled\n  functional\n  firstEnabledOn\n  __typename\n}\n\nfragment AccountOwner on AccountOwner {\n  accountId\n  identityId\n  accountNickname\n  clientCanonicalId\n  accountOpeningAgreementsSigned\n  name\n  email\n  ownershipType\n  activeInvitation {\n ...AccountOwnerInvitation\n __typename\n  }\n  sentInvitations {\n ...AccountOwnerInvitation\n __typename\n  }\n  __typename\n}\n\nfragment AccountOwnerInvitation on AccountOwnerInvitation {\n  id\n  createdAt\n  inviteeName\n  inviteeEmail\n  inviterName\n  inviterEmail\n  updatedAt\n  sentAt\n  status\n  __typename\n}\n\nfragment AccountEntityRelationship on AccountEntityRelationship {\n  accountCanonicalId\n  entityCanonicalId\n  entityOwnershipType\n  entityType\n  __typename\n}\n\nfragment AccountUpgradeProcess on AccountUpgradeProcess {\n  canonicalId\n  status\n  targetAccountType\n  __typename\n}\n\nfragment CustodianAccount on CustodianAccount {\n  id\n  branch\n  custodian\n  status\n  updatedAt\n  __typename\n}";
         case 'FetchIdentityHistoricalFinancials': return "query FetchIdentityHistoricalFinancials(\$identityId: ID!, \$currency: Currency!, \$startDate: Date, \$endDate: Date, \$first: Int, \$cursor: String, \$accountIds: [ID!]) {\n      identity(id: \$identityId) {\n        id\n        financials(filter: {accounts: \$accountIds}) {\n          historicalDaily(\n            currency: \$currency\n            startDate: \$startDate\n            endDate: \$endDate\n            first: \$first\n            after: \$cursor\n          ) {\n            edges {\n              node {\n                ...IdentityHistoricalFinancials\n                __typename\n              }\n              __typename\n            }\n            pageInfo {\n              hasNextPage\n              endCursor\n              __typename\n            }\n            __typename\n          }\n          __typename\n        }\n        __typename\n      }\n    }\n\n    fragment IdentityHistoricalFinancials on IdentityHistoricalDailyFinancials {\n      date\n      netLiquidationValueV2 {\n        amount\n        currency\n        __typename\n      }\n      netDepositsV2 {\n        amount\n        currency\n        __typename\n      }\n      __typename\n    }";
         case 'FetchCorporateActionChildActivities': return "query FetchCorporateActionChildActivities(\$activityCanonicalId: String!) {\n  corporateActionChildActivities(\n    condition: {activityCanonicalId: \$activityCanonicalId}\n  ) {\n    nodes {\n      ...CorporateActionChildActivity\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CorporateActionChildActivity on CorporateActionChildActivity {\n  canonicalId\n  activityCanonicalId\n  assetName\n  assetSymbol\n  assetType\n  entitlementType\n  quantity\n  currency\n  price\n  recordDate\n  __typename\n}";
+        case 'FetchBrokerageMonthlyStatementTransactions': return "query FetchBrokerageMonthlyStatementTransactions(\$period: String!, \$accountId: String!) {\n  brokerageMonthlyStatements(period: \$period, accountId: \$accountId) {\n    id\n    statementType\n    createdAt\n    data {\n      ... on BrokerageMonthlyStatementObject {\n        ...BrokerageMonthlyStatementObject\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment BrokerageMonthlyStatementObject on BrokerageMonthlyStatementObject {\n  custodianAccountId\n  activitiesPerCurrency {\n    currency\n    currentTransactions {\n      ...BrokerageMonthlyStatementTransactions\n      __typename\n    }\n    __typename\n  }\n  currentTransactions {\n    ...BrokerageMonthlyStatementTransactions\n    __typename\n  }\n  isMultiCurrency\n  __typename\n}\n\nfragment BrokerageMonthlyStatementTransactions on BrokerageMonthlyStatementTransactions {\n  balance\n  cashMovement\n  unit\n  description\n  transactionDate\n  transactionType\n  __typename\n}";
         };
     }
 
@@ -446,5 +447,33 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             'corporateActionChildActivities.nodes',
             'array',
         );
+    }
+
+    /**
+     * Retrieve transactions from account monthly statement.
+     *
+     * @param string $account_id The account ID to retrieve transactions for.
+     * @param string $period     The statement start date in 'YYYY-MM-DD' format. For example, '2025-10-01' for October 2025 statement.
+     *
+     * @return object[] A list of transactions.
+     * @throws WSApiException
+     */
+    public function getStatementTransactions(string $account_id, string $period): array {
+        $statements = $this->doGraphQLQuery(
+            'FetchBrokerageMonthlyStatementTransactions',
+            [
+                'accountId' => $account_id,
+                'period' => $period,
+            ],
+            'brokerageMonthlyStatements',
+            'array',
+        );
+        if (is_array($statements) && count($statements) > 0 && !empty($statements[0]->data->currentTransactions)) {
+            $transactions = $statements[0]->data->currentTransactions;
+        }
+        if (!$transactions || !is_array($transactions)) {
+            throw new WSApiException("Unexpected response format to GraphQL query 'FetchBrokerageMonthlyStatementTransactions'", 0, $statements);
+        }
+        return $transactions;
     }
 }
