@@ -331,6 +331,9 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $act->description = trim("Cash back $program");
         } elseif ($act->type === 'INSTITUTIONAL_TRANSFER_INTENT' && $act->subType === 'TRANSFER_OUT') {
             $act->description = "Institutional transfer: transfer to $act->institutionName";
+        } elseif ($act->type === 'SPEND' && $act->subType === 'PREPAID') {
+            $merchant = $act->spendMerchant;
+            $act->description = "Purchase: $merchant";
         }
         // @TODO Add other types
     }
