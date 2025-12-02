@@ -474,7 +474,10 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         if (is_array($statements) && count($statements) > 0 && !empty($statements[0]->data->currentTransactions)) {
             $transactions = $statements[0]->data->currentTransactions;
         }
-        if (!$transactions || !is_array($transactions)) {
+        if (empty($transactions)) {
+            return [];
+        }
+        if (!is_array($transactions)) {
             throw new WSApiException("Unexpected response format to GraphQL query 'FetchBrokerageMonthlyStatementTransactions'", 0, $statements);
         }
         return $transactions;
