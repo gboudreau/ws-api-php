@@ -251,8 +251,10 @@ abstract class WealthsimpleAPIBase
         $query = [
             'operationName' => $query_name,
             'query'         => static::getGraphQLQuery($query_name),
-            'variables'     => $variables,
         ];
+        if (!empty($variables)) {
+            $query['variables'] = $variables;
+        }
 
         $headers = [
             "x-ws-profile: trade",
