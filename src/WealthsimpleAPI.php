@@ -321,7 +321,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         } elseif ($act->type === 'CREDIT_CARD' && $act->subType === 'REFUND') {
             $merchant = $act->spendMerchant;
             $act->description = "Credit card refund: $merchant";
-        } elseif ($act->type === 'CREDIT_CARD' && $act->subType === 'PAYMENT') {
+        } elseif (($act->type === 'CREDIT_CARD' && $act->subType === 'PAYMENT') || $act->type === 'CREDIT_CARD_PAYMENT') {
             $act->description = "Credit card payment";
         } elseif ($act->type === 'REIMBURSEMENT' && $act->subType === 'CASHBACK') {
             $program = '';
