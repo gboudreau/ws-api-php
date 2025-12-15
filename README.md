@@ -91,6 +91,14 @@ foreach ($historical_fins as $hf) {
     echo "  - $hf->date = \$" . number_format($hf->netLiquidationValueV2->amount) . " - " . number_format($hf->netDepositsV2->amount) . " (deposits) = " . number_format($hf->netLiquidationValueV2->amount - $hf->netDepositsV2->amount) . " (gains)\n";
 }
 
+echo "All owned securities value and price:\n";
+$positions = $ws->getIdentityPositions();
+foreach ($positions as $pos) {
+    $sec = $ws->getSecurityMarketData($pos->security->id);
+    $account_id = $pos->accounts[0]->id;
+    echo "- [$account_id]\t{$sec->stock->symbol}\t\tbookValue:{$pos->bookValue->amount}\taveragePrice:{$pos->averagePrice->amount}\tmarketAveragePrice:{$pos->marketAveragePrice->amount}\tmarketBookValue:{$pos->marketBookValue->amount}\ttotalValue:{$pos->totalValue->amount}\tunrealizedReturns:{$pos->unrealizedReturns->amount}\tmarketUnrealizedReturns:{$pos->marketUnrealizedReturns->amount}\n";
+}
+
 foreach ($accounts as $account) {
     echo "Account: $account->description ($account->number)\n";
     if ($account->description === $account->unifiedAccountType) {
