@@ -95,8 +95,19 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $account->description = "Crypto";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_RRIF') {
             $account->description = "RRIF: self-directed";
+        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_SPOUSAL_RRIF') {
+            $account->description = "RRIF: self-directed spousal";
         } elseif ($account->unifiedAccountType === 'CREDIT_CARD') {
             $account->description = "Credit card";
+        } elseif ($account->unifiedAccountType === 'MANAGED_NON_REGISTERED') {
+            if (array_filter($account->accountFeatures, fn ($feature) => $feature->name === 'PRIVATE_CREDIT')) {
+                $account->description = "Non-registered: managed - private credit";
+            }
+            if (array_filter($account->accountFeatures, fn ($feature) => $feature->name === 'PRIVATE_EQUITY')) {
+                $account->description = "Non-registered: managed - private equity";
+            }
+        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_LIRA') {
+            $account->description = "LIRA: self-directed";
         }
         // @TODO Add other types
     }
