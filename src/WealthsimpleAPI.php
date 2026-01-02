@@ -74,15 +74,15 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 $account->description = "Cash";
             }
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_RRSP') {
-            $account->description = "RRSP: self-directed - $account->currency";
+            $account->description = "RRSP: self-directed";
         } elseif ($account->unifiedAccountType === 'MANAGED_RRSP') {
-            $account->description = "RRSP: managed - $account->currency";
+            $account->description = "RRSP: managed";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_SPOUSAL_RRSP') {
-            $account->description = "RRSP: self-directed spousal - $account->currency";
+            $account->description = "RRSP: self-directed spousal";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_TFSA') {
-            $account->description = "TFSA: self-directed - $account->currency";
+            $account->description = "TFSA: self-directed";
         } elseif ($account->unifiedAccountType === 'MANAGED_TFSA') {
-            $account->description = "TFSA: managed - $account->currency";
+            $account->description = "TFSA: managed";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_NON_REGISTERED') {
             $account->description = "Non-registered: self-directed";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_JOINT_NON_REGISTERED') {
@@ -94,7 +94,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_CRYPTO') {
             $account->description = "Crypto";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_RRIF') {
-            $account->description = "RRIF: self-directed - $account->currency";
+            $account->description = "RRIF: self-directed";
         } elseif ($account->unifiedAccountType === 'CREDIT_CARD') {
             $account->description = "Credit card";
         }
