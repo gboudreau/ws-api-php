@@ -228,7 +228,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
 
     private function _activityAddDescription(&$act) {
         $act->description = "$act->type: $act->subType";
-        if ($act->type === 'INTERNAL_TRANSFER') {
+        if ($act->type === 'INTERNAL_TRANSFER' || $act->type === 'ASSET_MOVEMENT') {
             $accounts = $this->getAccounts(FALSE);
             $matching = array_filter($accounts, fn($acc) => $acc->id === $act->opposingAccountId);
             $target_account = array_pop($matching);
@@ -237,11 +237,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             } else {
                 $account_description = $act->opposingAccountId;
             }
-            if ($act->subType === 'SOURCE') {
-                $act->description = "Transfer out: Transfer to Wealthsimple $account_description";
-            } else {
-                $act->description = "Transfer in: Transfer from Wealthsimple $account_description";
-            }
+            $direction = $act->subType === 'SOURCE' ? 'to' : 'from';
+            $act->description = "Money transfer: $direction Wealthsimple $account_description";
         } elseif ($act->type === 'DIY_BUY' || $act->type === 'DIY_SELL') {
             $verb = ucfirst(strtolower(str_replace('_', ' ', $act->subType)));
             $action = $act->type === 'DIY_BUY' ? 'buy' : 'sell';
