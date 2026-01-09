@@ -362,10 +362,14 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
     protected function securityIdToSymbol(string $security_id): string {
         $security_symbol = "[$security_id]";
         if ($this->security_market_data_cache_getter) {
-            $market_data = $this->getSecurityMarketData($security_id);
-            if (!empty($market_data->stock)) {
-                $stock = $market_data->stock;
-                $security_symbol = "$stock->primaryExchange:$stock->symbol";
+            try {
+                $market_data = $this->getSecurityMarketData($security_id);
+                if (!empty($market_data->stock)) {
+                    $stock = $market_data->stock;
+                    $security_symbol = "$stock->primaryExchange:$stock->symbol";
+                }
+            } catch (\Exception $ex) {
+                // Some securities cannot be looked up (e.g., delisted or special securities)
             }
         }
         return $security_symbol;
