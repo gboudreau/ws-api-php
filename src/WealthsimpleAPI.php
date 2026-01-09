@@ -347,6 +347,14 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         } elseif ($act->type === 'SPEND' && $act->subType === 'PREPAID') {
             $merchant = $act->spendMerchant;
             $act->description = "Purchase: $merchant";
+        } elseif ($act->type === 'INTEREST_CHARGE') {
+            if ($act->subType === 'MARGIN_INTEREST') {
+                $act->description = "Interest Charge: margin interest";
+            } else {
+                $act->description = "Interest Charge";
+            }
+        } elseif ($act->type === 'FEE' && $act->subType === 'MANAGEMENT_FEE') {
+            $act->description = "Management fee";
         }
         // @TODO Add other types
     }
