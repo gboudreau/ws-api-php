@@ -239,9 +239,12 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             }
             $direction = $act->subType === 'SOURCE' ? 'to' : 'from';
             $act->description = "Money transfer: $direction Wealthsimple $account_description";
-        } elseif ($act->type === 'DIY_BUY' || $act->type === 'DIY_SELL') {
+        } elseif ($act->type === 'DIY_BUY' || $act->type === 'DIY_SELL' || $act->type === 'MANAGED_BUY' || $act->type === 'MANAGED_SELL') {
             $verb = ucfirst(strtolower(str_replace('_', ' ', $act->subType)));
-            $action = $act->type === 'DIY_BUY' ? 'buy' : 'sell';
+            if (string_contains($act->type, 'MANAGED')) {
+                $verb = "Managed transaction";
+            }
+            $action = $act->type === 'DIY_BUY' || $act->type === 'MANAGED_BUY' ? 'buy' : 'sell';
             $security = $this->securityIdToSymbol($act->securityId);
             if (empty($act->assetQuantity)) {
                 $act->description = "$verb: $action TBD";
