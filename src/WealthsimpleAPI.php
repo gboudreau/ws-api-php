@@ -83,6 +83,10 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $account->description = "TFSA: self-directed";
         } elseif ($account->unifiedAccountType === 'MANAGED_TFSA') {
             $account->description = "TFSA: managed";
+        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_FHSA') {
+            $account->description = "FHSA: self-directed";
+        } elseif ($account->unifiedAccountType === 'MANAGED_FHSA') {
+            $account->description = "FHSA: managed";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_NON_REGISTERED') {
             $account->description = "Non-registered: self-directed";
         } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_JOINT_NON_REGISTERED') {
