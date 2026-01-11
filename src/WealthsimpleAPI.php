@@ -55,6 +55,26 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         return $accounts_cache[$cache_key];
     }
 
+    // Mapping of account types to human-readable descriptions
+    const ACCOUNT_TYPE_DESCRIPTIONS = [
+        "SELF_DIRECTED_RRSP" => "RRSP: self-directed",
+        "MANAGED_RRSP" => "RRSP: managed",
+        "SELF_DIRECTED_SPOUSAL_RRSP" => "RRSP: self-directed spousal",
+        "SELF_DIRECTED_TFSA" => "TFSA: self-directed",
+        "MANAGED_TFSA" => "TFSA: managed",
+        "SELF_DIRECTED_FHSA" => "FHSA: self-directed",
+        "MANAGED_FHSA" => "FHSA: managed",
+        "SELF_DIRECTED_NON_REGISTERED" => "Non-registered: self-directed",
+        "SELF_DIRECTED_JOINT_NON_REGISTERED" => "Non-registered: self-directed - joint",
+        "SELF_DIRECTED_NON_REGISTERED_MARGIN" => "Non-registered: self-directed margin",
+        "MANAGED_JOINT" => "Non-registered: managed - joint",
+        "SELF_DIRECTED_CRYPTO" => "Crypto",
+        "SELF_DIRECTED_RRIF" => "RRIF: self-directed",
+        "SELF_DIRECTED_SPOUSAL_RRIF" => "RRIF: self-directed spousal",
+        "CREDIT_CARD" => "Credit card",
+        "SELF_DIRECTED_LIRA" => "LIRA: self-directed",
+    ];
+
     private function _accountAddDescription($account) {
         $account->number = $account->id;
         // This is the account number visible in the WS app:
@@ -64,56 +84,30 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             }
         }
 
-        $account->description = $account->unifiedAccountType;
+        $accountType = $account->unifiedAccountType;
+
         if (!empty($account->nickname)) {
+            // Special case: user-defined name
             $account->description = $account->nickname;
-        } elseif ($account->unifiedAccountType === 'CASH') {
-            if ($account->accountOwnerConfiguration === 'MULTI_OWNER') {
-                $account->description = "Cash: joint";
-            } else {
-                $account->description = "Cash";
-            }
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_RRSP') {
-            $account->description = "RRSP: self-directed";
-        } elseif ($account->unifiedAccountType === 'MANAGED_RRSP') {
-            $account->description = "RRSP: managed";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_SPOUSAL_RRSP') {
-            $account->description = "RRSP: self-directed spousal";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_TFSA') {
-            $account->description = "TFSA: self-directed";
-        } elseif ($account->unifiedAccountType === 'MANAGED_TFSA') {
-            $account->description = "TFSA: managed";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_FHSA') {
-            $account->description = "FHSA: self-directed";
-        } elseif ($account->unifiedAccountType === 'MANAGED_FHSA') {
-            $account->description = "FHSA: managed";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_NON_REGISTERED') {
-            $account->description = "Non-registered: self-directed";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_JOINT_NON_REGISTERED') {
-            $account->description = "Non-registered: self-directed - joint";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_NON_REGISTERED_MARGIN') {
-            $account->description = "Non-registered: self-directed margin";
-        } elseif ($account->unifiedAccountType === 'MANAGED_JOINT') {
-            $account->description = "Non-registered: managed - joint";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_CRYPTO') {
-            $account->description = "Crypto";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_RRIF') {
-            $account->description = "RRIF: self-directed";
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_SPOUSAL_RRIF') {
-            $account->description = "RRIF: self-directed spousal";
-        } elseif ($account->unifiedAccountType === 'CREDIT_CARD') {
-            $account->description = "Credit card";
-        } elseif ($account->unifiedAccountType === 'MANAGED_NON_REGISTERED') {
-            if (array_filter($account->accountFeatures, fn ($feature) => $feature->name === 'PRIVATE_CREDIT')) {
+        } elseif ($accountType === 'CASH') {
+            // Special case: CASH depends on owner configuration
+            $account->description = $account->accountOwnerConfiguration === 'MULTI_OWNER'
+                ? "Cash: joint"
+                : "Cash";
+        } elseif ($accountType === 'MANAGED_NON_REGISTERED') {
+            // Special case: MANAGED_NON_REGISTERED depends on features
+            $features = array_column($account->accountFeatures, 'name');
+            if (in_array('PRIVATE_CREDIT', $features)) {
                 $account->description = "Non-registered: managed - private credit";
-            }
-            if (array_filter($account->accountFeatures, fn ($feature) => $feature->name === 'PRIVATE_EQUITY')) {
+            } elseif (in_array('PRIVATE_EQUITY', $features)) {
                 $account->description = "Non-registered: managed - private equity";
+            } else {
+                $account->description = $accountType;
             }
-        } elseif ($account->unifiedAccountType === 'SELF_DIRECTED_LIRA') {
-            $account->description = "LIRA: self-directed";
+        } else {
+            // Simple lookup for all other types
+            $account->description = static::ACCOUNT_TYPE_DESCRIPTIONS[$accountType] ?? $accountType;
         }
-        // @TODO Add other types
     }
 
     public function getAccountBalances(string $account_id) : array {
