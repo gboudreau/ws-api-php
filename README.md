@@ -106,24 +106,30 @@ foreach ($accounts as $account) {
         echo "    Unknown account: " . json_encode($account) . "\n";
     }
 
-    if ($account->currency === 'CAD') {
-        $value = $account->financials->currentCombined->netLiquidationValue->amount;
-        echo "  Net worth: $value $account->currency\n";
-    }
-    // Note: for USD accounts, $value is just the CAD value converted in USD, so it's not the real value of the account.
-    // For USD accounts, only the balance & positions (below) are relevant.
-
-    // Cash and positions balances
-    $balances = $ws->getAccountBalances($account->id);
-    $cash_balance = (float) $balances[$account->currency === 'USD' ? 'sec-c-usd' : 'sec-c-cad'] ?? 0;
-    echo "  Available (cash) balance: $cash_balance $account->currency\n";
-    if (count($balances) > 1) {
-        echo "  Assets:\n";
-        foreach ($balances as $security => $bal) {
-            if ($security === 'sec-c-cad' || $security === 'sec-c-usd') {
-                continue;
+    if (strpos($account->id, 'credit-card') !== FALSE) {
+        $cc_infos = $ws->getCreditcardAccount($account->id);
+        $balance = $cc_infos->balance->current;
+        echo "  Credit card balance: $balance CAD\n";
+    } else {
+        if ($account->currency === 'CAD') {
+            $value = $account->financials->currentCombined->netLiquidationValue->amount;
+            echo "  Net worth: $value $account->currency\n";
+        }
+        // Note: for USD accounts, $value is just the CAD value converted in USD, so it's not the real value of the account.
+        // For USD accounts, only the balance & positions (below) are relevant.
+    
+        // Cash and positions balances
+        $balances = $ws->getAccountBalances($account->id);
+        $cash_balance = (float) $balances[$account->currency === 'USD' ? 'sec-c-usd' : 'sec-c-cad'] ?? 0;
+        echo "  Available (cash) balance: $cash_balance $account->currency\n";
+        if (count($balances) > 1) {
+            echo "  Assets:\n";
+            foreach ($balances as $security => $bal) {
+                if ($security === 'sec-c-cad' || $security === 'sec-c-usd') {
+                    continue;
+                }
+                echo "  - $security x $bal\n";
             }
-            echo "  - $security x $bal\n";
         }
     }
 
