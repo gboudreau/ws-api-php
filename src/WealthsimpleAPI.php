@@ -104,6 +104,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 $account->description = "Non-registered: managed - private credit";
             } elseif (in_array('PRIVATE_EQUITY', $features)) {
                 $account->description = "Non-registered: managed - private equity";
+            } elseif (in_array('MANAGED', $features)) {
+                $account->description = "Non-registered: managed";
             } else {
                 $account->description = $accountType;
             }
