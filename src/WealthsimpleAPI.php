@@ -243,13 +243,26 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             }
             $direction = $act->subType === 'SOURCE' ? 'to' : 'from';
             $act->description = "Money transfer: $direction Wealthsimple $account_description";
-        } elseif ($act->type === 'DIY_BUY' || $act->type === 'DIY_SELL' || $act->type === 'MANAGED_BUY' || $act->type === 'MANAGED_SELL') {
+        } elseif ($act->type === 'LEGACY_INTERNAL_TRANSFER') {
+            $act->description = $act->subType === 'DESTINATION' ? "Transfer in" : "Transfer out";
+        } elseif ($act->type === 'CRYPTO_STAKING_ACTION') {
+            $action = $act->subType === "STAKE" ? 'stake' : 'unstake';
+            $security = $this->securityIdToSymbol($act->securityId);
+            $act->description = "Crypto $action: " . ((float) $act->assetQuantity) . " x $security";
+        } elseif ($act->type === 'CRYPTO_TRANSFER') {
+            $action = $act->subType === "TRANSFER_OUT" ? 'sent' : 'received';
+            $security = $this->securityIdToSymbol($act->securityId);
+            $act->description = "Crypto $action: " . ((float) $act->assetQuantity) . " x $security";
+        } elseif (in_array($act->type, ['DIY_BUY', 'DIY_SELL', 'MANAGED_BUY', 'MANAGED_SELL', 'CRYPTO_BUY', 'CRYPTO_SELL'])) {
             if (string_contains($act->type, 'MANAGED')) {
                 $verb = "Managed transaction";
             } else {
                 $verb = ucfirst(strtolower(str_replace('_', ' ', $act->subType)));
+                if (string_contains($act->type, "CRYPTO")) {
+                    $verb = "Crypto $verb";
+                }
             }
-            $action = $act->type === 'DIY_BUY' || $act->type === 'MANAGED_BUY' ? 'buy' : 'sell';
+            $action = string_contains($act->type, '_BUY') ? 'buy' : 'sell';
             $security = $this->securityIdToSymbol($act->securityId);
             if (empty($act->assetQuantity)) {
                 $act->description = "$verb: $action TBD";
@@ -289,6 +302,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $act->description = "$type: EFT $direction " . ($bank_account->nickname ?? $bank_account->accountName) . " {$bank_account->accountNumber}";
         } elseif ($act->type === 'REFUND' && $act->subType === 'TRANSFER_FEE_REFUND') {
             $act->description = "Reimbursement: account transfer fee";
+        } elseif ($act->type === 'REFUND') {
+            $act->description = "Refund";
         } elseif ($act->type === 'INSTITUTIONAL_TRANSFER_INTENT' && $act->subType === 'TRANSFER_IN') {
             $details = $this->getTransferDetails($act->externalCanonicalId);
             $verb = ucfirst(strtolower(str_replace('_', '-', $details->transferType)));
@@ -347,6 +362,10 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 $program = "- Visa Infinite";
             }
             $act->description = trim("Cash back $program");
+        } elseif ($act->type === 'REIMBURSEMENT' && $act->subType === 'ETF_REBATE') {
+            $act->description = "Reimbursement: Exchange-traded fund rebate";
+        } elseif ($act->type === 'REIMBURSEMENT' && $act->subType === 'REWARD') {
+            $act->description = "Reimbursement: Reward";
         } elseif ($act->type === 'INSTITUTIONAL_TRANSFER_INTENT' && $act->subType === 'TRANSFER_OUT') {
             $act->description = "Institutional transfer: transfer to $act->institutionName";
         } elseif ($act->type === 'SPEND' && $act->subType === 'PREPAID') {
