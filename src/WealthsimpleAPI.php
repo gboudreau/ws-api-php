@@ -541,7 +541,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         return $positions;
     }
 
-    public function getCreditcardCccount(string $credit_card_account_id): object {
+    public function getCreditcardAccount(string $credit_card_account_id): object {
         $account = $this->doGraphQLQuery(
             'FetchCreditCardAccount',
             [
