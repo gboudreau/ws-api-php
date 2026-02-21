@@ -146,8 +146,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             [
                 'id' => $account_id,
                 'currency' => $currency,
-                'startDate' => $start_date,
-                'endDate' => $end_date,
+                'startDate' => static::dateFormatISO($start_date),
+                'endDate' => static::dateFormatISO($end_date),
                 'resolution' => $resolution,
                 'first' => $first,
                 'cursor' => $cursor,
@@ -163,8 +163,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             [
                 'identityId' => $this->getTokenInfo()->identity_canonical_id,
                 'currency' => $currency,
-                'startDate' => $start_date,
-                'endDate' => $end_date,
+                'startDate' => static::dateFormatISO($start_date),
+                'endDate' => static::dateFormatISO($end_date),
                 'first' => $first,
                 'cursor' => $cursor,
                 'accountIds' => $account_ids,
@@ -190,7 +190,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
      * @throws Exceptions\UnexpectedException
      * @throws WSApiException If the response format is unexpected.
      */
-    public function getActivities($account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $startDate = NULL, string $endDate = NULL, bool $load_all_pages = TRUE): array {
+    public function getActivities($account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $start_date = NULL, string $end_date = NULL, bool $load_all_pages = TRUE): array {
         $filter_fn = function ($act) use ($ignore_rejected) {
             if ($act->type === 'LEGACY_TRANSFER') {
                 // Never return those
@@ -216,8 +216,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 'orderBy' => $order_by,
                 'first'   => $how_many,
                 'condition' => [
-                    'startDate'  => $startDate ? date('Y-m-d\TH:i:s.999\Z', strtotime($startDate)) : NULL,
-                    'endDate'    => date('Y-m-d\TH:i:s.999\Z', $endDate ? strtotime($endDate) : strtotime('+1 day')),
+                    'startDate'  => static::dateFormatISO($start_date),
+                    'endDate'    => static::dateFormatISO($end_date ?: '+1 day'),
                     'accountIds' => $account_id,
                 ],
             ],
