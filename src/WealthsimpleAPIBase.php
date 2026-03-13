@@ -118,7 +118,7 @@ abstract class WealthsimpleAPIBase
             $response = str_replace("\r", "", $response);
             foreach (explode("\n", $response) as $line) {
                 if (empty($this->session->wssdi)) {
-                    if (preg_match('/set-cookie:.*wssdi=([a-f0-9]+);/i', $line, $re)) {
+                    if (preg_match('/set-cookie:.*wssdi=([a-f0-9-]+);/i', $line, $re)) {
                         $this->session->wssdi = $re[1];
                     }
                 }
@@ -136,7 +136,7 @@ abstract class WealthsimpleAPIBase
             }
             $response = $this->sendGET($app_js_url);
             foreach (explode("\n", $response) as $line) {
-                if (preg_match('/production:.*clientId:"([a-f0-9]+)"/i', $line, $re)) {
+                if (preg_match('/production.*clientId:"([a-f0-9]+)"/i', $line, $re)) {
                     $this->session->client_id = $re[1];
                 }
             }
