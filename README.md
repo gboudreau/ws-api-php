@@ -120,8 +120,11 @@ foreach ($accounts as $account) {
     
         // Cash and positions balances
         $balances = $ws->getAccountBalances($account->id);
-        $cash_balance = (float) $balances[$account->currency === 'USD' ? 'sec-c-usd' : 'sec-c-cad'] ?? 0;
-        echo "  Available (cash) balance: $cash_balance $account->currency\n";
+        foreach (['sec-c-usd', 'sec-c-cad'] as $cash_balance_key) {
+            $cash_balance = (float) ($balances[$cash_balance_key] ?? 0);
+            $cash_currency = strtoupper(explode('-', $cash_balance_key)[2]);
+            echo "  Available (cash) balance: $cash_balance $cash_currency\n";
+        }
         if (count($balances) > 1) {
             echo "  Assets:\n";
             foreach ($balances as $security => $bal) {
