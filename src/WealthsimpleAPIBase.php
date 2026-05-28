@@ -251,7 +251,7 @@ abstract class WealthsimpleAPIBase
         if (empty($timestamp)) {
             return NULL;
         }
-        return date('Y-m-d\TH:i:s.u\Z', strtotime($timestamp));
+        return date('Y-m-d', strtotime($timestamp));
     }
 
     protected function doGraphQLQuery(string $query_name, array $variables, string $data_response_path, string $expect_type, ?callable $filter = NULL, bool $load_all_pages = FALSE) {
@@ -279,7 +279,7 @@ abstract class WealthsimpleAPIBase
         $data = $response->data;
         $end_cursor = NULL;
         foreach (explode('.', $data_response_path) as $key) {
-            if (!property_exists($data, $key)) {
+            if (!is_object($data) || !property_exists($data, $key)) {
                 throw new WSApiException("GraphQL query failed: $query_name", 0, $response);
             }
             $data = $data->{$key};
