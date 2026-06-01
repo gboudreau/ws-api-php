@@ -36,6 +36,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         case 'FetchIdentityRealizedReturns': return "query FetchIdentityRealizedReturns(\$identityId: ID!, \$currency: Currency!, \$accountIds: [ID!], \$startDate: Date, \$accountScope: AccountScope = OWN, \$first: Int) {\n  identity(id: \$identityId) {\n    id\n    financials(filter: {accounts: \$accountIds}, accountScope: \$accountScope) {\n      realizedReturns(currency: \$currency, startDate: \$startDate) {\n        totalValue { amount cents currency }\n        securityBreakdown(first: \$first) {\n          edges {\n            node {\n              security {\n                id\n                stock { name symbol }\n              }\n              totalValue { amount cents currency }\n            }\n          }\n          pageInfo { hasNextPage endCursor }\n        }\n      }\n    }\n  }\n}";
         case 'FetchDividendsV2': return "query FetchDividendsV2(\$identityId: ID!, \$currency: Currency!, \$accountIds: [ID!], \$startDate: Date, \$accountScope: AccountScope = OWN, \$includeIssuingSecurityBreakdown: Boolean = false) {\n  identity(id: \$identityId) {\n    id\n    financials(filter: {accounts: \$accountIds}, accountScope: \$accountScope) {\n      dividendsV2(startDate: \$startDate, currency: \$currency) {\n        totalValue { amount cents currency }\n        issuingSecurityBreakdown @include(if: \$includeIssuingSecurityBreakdown) {\n          security {\n            id\n            stock { name symbol }\n          }\n          totalValue { amount cents currency }\n        }\n      }\n    }\n  }\n}";
         case 'FetchIntraDayChartQuotes': return "query FetchIntraDayChartQuotes(\$id: ID!, \$date: Date, \$tradingSession: TradingSession, \$currency: Currency, \$period: ChartPeriod) {\n  security(id: \$id) {\n    id\n    ...IntraDayChartQuotes\n    __typename\n  }\n}\n\nfragment IntraDayChartQuotes on Security {\n  chartBarQuotes(\n    date: \$date\n    tradingSession: \$tradingSession\n    currency: \$currency\n    period: \$period\n  ) {\n    securityId\n    price\n    sessionPrice\n    timestamp\n    currency\n    marketStatus\n    __typename\n  }\n  __typename\n}";
+        case 'FetchSecurityDividendDetails': return "query FetchSecurityDividendDetails(\$securityId: ID!, \$currency: Currency) {\n  security(id: \$securityId) {\n    id\n    currency\n    fundamentals(currency: \$currency) {\n      yield\n      __typename\n    }\n    events {\n      exDividendDate\n      payableDate\n      recordDate\n      __typename\n    }\n    stock {\n      dividendFrequency\n      __typename\n    }\n    __typename\n  }\n}";
         };
     }
 
@@ -654,6 +655,30 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 'startDate'                       => static::dateFormatISO($start_date),
             ],
             'identity.financials.dividendsV2',
+            'object',
+        );
+    }
+
+    /**
+     * Get declared dividend details for a security.
+     *
+     * @param string $security_id     Wealthsimple security ID
+     * @param string|null $currency   Currency for the yield figure (optional)
+     *
+     * @return object Security object containing events (exDividendDate, payableDate, recordDate),
+     *                yield, and dividendFrequency. Note that events is an empty list until the
+     *                issuer announces the next dividend.
+     * @throws WSApiException
+     */
+    public function getSecurityDividendDetails(string $security_id, ?string $currency = null): object {
+        $variables = ['securityId' => $security_id];
+        if ($currency) {
+            $variables['currency'] = $currency;
+        }
+        return $this->doGraphQLQuery(
+            'FetchSecurityDividendDetails',
+            $variables,
+            'security',
             'object',
         );
     }
