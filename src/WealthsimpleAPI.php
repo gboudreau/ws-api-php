@@ -39,10 +39,10 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         };
     }
 
-    private $accounts_cache = [];
+    private array $accounts_cache = [];
     public function getAccounts(bool $open_only = TRUE, bool $use_cache = TRUE): array {
         $cache_key = $open_only ? 'open' : 'all';
-        if (!isset($accounts_cache[$cache_key]) || !$use_cache) {
+        if (!isset($this->accounts_cache[$cache_key]) || !$use_cache) {
             $accounts = $this->doGraphQLQuery(
                 'FetchAllAccountFinancials',
                 [
@@ -55,9 +55,9 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
                 LOAD_ALL_PAGES,
             );
             array_walk($accounts, fn($account) => $this->_accountAddDescription($account));
-            $accounts_cache[$cache_key] = $accounts;
+            $this->accounts_cache[$cache_key] = $accounts;
         }
-        return $accounts_cache[$cache_key];
+        return $this->accounts_cache[$cache_key];
     }
 
     // Mapping of account types to human-readable descriptions
