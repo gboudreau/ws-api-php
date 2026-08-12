@@ -621,14 +621,14 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         );
     }
 
-    public function getAccountUnrealizedPnL(string $account_id, string $currency): object {
+    public function getAccountUnrealizedPnL(string $account_id, string $currency, bool $combined = TRUE): object {
         return $this->doGraphQLQuery(
             'FetchAccountUnrealizedPnL',
             [
                 'id'       => $account_id,
                 'currency' => $currency,
             ],
-            'account.financials.currentCombined.unrealizedPnL',
+            $combined ? 'account.financials.currentCombined.unrealizedPnL' : 'account.financials',
             'object',
         );
     }
