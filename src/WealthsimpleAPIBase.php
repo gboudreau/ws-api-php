@@ -33,7 +33,7 @@ abstract class WealthsimpleAPIBase
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
-    private function sendHttpRequest(string $url, $method = 'POST', $data = NULL, array $headers = [], bool $return_headers = FALSE) {
+    private function sendHttpRequest(string $url, $method = 'POST', $data = NULL, array $headers = [], bool $return_headers = FALSE, bool $return_cookies = FALSE) {
         $ch = curl_init();
 
         if ($method === 'POST') {
@@ -66,13 +66,33 @@ abstract class WealthsimpleAPIBase
             curl_setopt($ch, CURLOPT_HEADER, TRUE);
         }
 
+        $cookie_jar = NULL;
+        if ($return_cookies) {
+            $cookie_jar = tempnam(sys_get_temp_dir(), 'wsapi_cookies_');
+            curl_setopt($ch, CURLOPT_COOKIEJAR, $cookie_jar);
+            curl_setopt($ch, CURLOPT_COOKIEFILE, $cookie_jar);
+        }
+
         // The following command enables cURL's "auto encoding" mode, where it will announce to the server which encoding methods it supports (via the Accept-Encoding header), and then automatically decompress the response for you:
         curl_setopt($ch, CURLOPT_ENCODING, '');
 
         $result = curl_exec($ch);
 
         if (!$result) {
-            throw new CurlException("Error executing sendPOST($url); cURL error: " . curl_errno($ch) . " " . curl_error($ch), curl_errno($ch));
+            $errno = curl_errno($ch);
+            $err = curl_error($ch);
+            curl_close($ch);
+            if ($cookie_jar !== NULL) {
+                @unlink($cookie_jar);
+            }
+            throw new CurlException("Error executing sendPOST($url); cURL error: $errno $err", $errno);
+        }
+
+        if ($return_cookies) {
+            $cookies = self::parseCookieJar($cookie_jar);
+            @unlink($cookie_jar);
+            curl_close($ch);
+            return (object) ['body' => $result, 'cookies' => $cookies];
         }
 
         curl_close($ch);
@@ -80,12 +100,34 @@ abstract class WealthsimpleAPIBase
         return $result;
     }
 
-    private function sendGET(string $url, array $headers = [], bool $return_headers = FALSE) {
-        return $this->sendHttpRequest($url, 'GET', NULL, $headers, $return_headers);
+    private static function parseCookieJar(string $path): array {
+        $cookies = [];
+        if (!file_exists($path) || filesize($path) === 0) {
+            return $cookies;
+        }
+        $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === FALSE) {
+            return $cookies;
+        }
+        foreach ($lines as $line) {
+            if ($line === '' || $line[0] === '#') {
+                continue;
+            }
+            // Netscape cookie file format: domain  flag  path  secure  expiration  name  value
+            $parts = preg_split('/\s+/', $line, 7);
+            if (is_array($parts) && count($parts) >= 7) {
+                $cookies[$parts[5]] = $parts[6];
+            }
+        }
+        return $cookies;
     }
 
-    private function sendPOST(string $url, $data, array $headers = [], bool $return_headers = FALSE) {
-        return $this->sendHttpRequest($url, 'POST', $data, $headers, $return_headers);
+    private function sendGET(string $url, array $headers = [], bool $return_headers = FALSE, bool $return_cookies = FALSE) {
+        return $this->sendHttpRequest($url, 'GET', NULL, $headers, $return_headers, $return_cookies);
+    }
+
+    private function sendPOST(string $url, $data, array $headers = [], bool $return_headers = FALSE, bool $return_cookies = FALSE) {
+        return $this->sendHttpRequest($url, 'POST', $data, $headers, $return_headers, $return_cookies);
     }
 
     private function __construct(?object $session = NULL) {
@@ -110,22 +152,60 @@ abstract class WealthsimpleAPIBase
             $this->session->session_id = $session->session_id;
             $this->session->client_id = $session->client_id;
             $this->session->refresh_token = $session->refresh_token;
-            return;
         }
 
         if (empty($this->session->wssdi) || empty($this->session->client_id)) {
-            $response = static::sendGET('https://my.wealthsimple.com/app/login', [], TRUE);
-            $response = str_replace("\r", "", $response);
-            foreach (explode("\n", $response) as $line) {
-                if (empty($this->session->wssdi)) {
+            $this->bootstrapDeviceIdAndClient();
+        }
+
+        if (empty($this->session->session_id)) {
+            $this->session->session_id = $this->uuidv4();
+        }
+    }
+
+    /**
+     * Perform the unauthenticated bootstrap requests to obtain wssdi (device ID)
+     * and client_id.
+     *
+     * Uses sendHttpRequest (with $return_cookies) so the configured user_agent
+     * is applied and network errors are consistently wrapped as CurlException.
+     * Prefers the cURL cookie jar (which correctly handles multiple Set-Cookie
+     * headers) with a narrow fallback to the raw header parsing logic for
+     * unusual environments.
+     *
+     * @return void
+     * @throws UnexpectedException
+     */
+    private function bootstrapDeviceIdAndClient() : void {
+        $app_js_url = NULL;
+
+        if (empty($this->session->wssdi) || empty($this->session->client_id)) {
+            // Fetch the login page via the wrapper for consistent headers + error handling.
+            $resp = $this->sendGET('https://my.wealthsimple.com/app/login', [], FALSE, TRUE);
+
+            // Preferred path: cookie jar (handles duplicates, path, domain, etc.)
+            if (empty($this->session->wssdi) && isset($resp->cookies['wssdi'])) {
+                $this->session->wssdi = $resp->cookies['wssdi'];
+            }
+
+            // Fallback: parse the raw Set-Cookie header string (last resort).
+            if (empty($this->session->wssdi)) {
+                foreach (explode("\n", str_replace("\r", "", $resp->body)) as $line) {
                     if (preg_match('/set-cookie:.*wssdi=([a-f0-9-]+);/i', $line, $re)) {
                         $this->session->wssdi = $re[1];
+                        break;
                     }
                 }
+            }
+
+            // Locate the main application bundle URL from the HTML.
+            foreach (explode("\n", $resp->body) as $line) {
                 if (preg_match('/<script.*src="(.+\/app-[a-f0-9]+.js)/i', $line, $re)) {
                     $app_js_url = $re[1];
+                    break;
                 }
             }
+
             if (!$this->session->wssdi) {
                 throw new UnexpectedException("Couldn't find wssdi in login page response headers.");
             }
@@ -134,8 +214,8 @@ abstract class WealthsimpleAPIBase
             if (empty($app_js_url)) {
                 throw new UnexpectedException("Couldn't find app JS URL in login page response body.");
             }
-            $response = $this->sendGET($app_js_url);
-            foreach (explode("\n", $response) as $line) {
+            $resp = $this->sendGET($app_js_url, [], FALSE, TRUE);
+            foreach (explode("\n", str_replace("\r", "", $resp->body)) as $line) {
                 if (preg_match('/"production"[^}]*clientId:"([a-f0-9]+)"/i', $line, $re)) {
                     $this->session->client_id = $re[1];
                 }
@@ -143,9 +223,6 @@ abstract class WealthsimpleAPIBase
             if (!$this->session->client_id) {
                 throw new UnexpectedException("Couldn't find clientId in app JS.");
             }
-        }
-        if (empty($this->session->session_id)) {
-            $this->session->session_id = $this->uuidv4();
         }
     }
 
