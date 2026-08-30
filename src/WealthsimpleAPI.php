@@ -104,15 +104,19 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $account->description = $account->accountOwnerConfiguration === 'MULTI_OWNER'
                 ? "Cash: joint"
                 : "Cash";
-        } elseif ($accountType === 'MANAGED_NON_REGISTERED') {
-            // Special case: MANAGED_NON_REGISTERED depends on features
+        } elseif ($accountType === 'MANAGED_NON_REGISTERED' || $accountType === 'MANAGED_PORTFOLIO_NON_REGISTERED') {
+            // Special case: MANAGED_NON_REGISTERED and MANAGED_PORTFOLIO_NON_REGISTERED depends on features
             $features = array_column($account->accountFeatures, 'name');
             if (in_array('PRIVATE_CREDIT', $features)) {
                 $account->description = "Non-registered: managed - private credit";
             } elseif (in_array('PRIVATE_EQUITY', $features)) {
                 $account->description = "Non-registered: managed - private equity";
             } elseif (in_array('MANAGED', $features)) {
-                $account->description = "Non-registered: managed";
+                if ($accountType === 'MANAGED_PORTFOLIO_NON_REGISTERED') {
+                    $account->description = "Non-registered: managed portfolio";
+                } else {
+                    $account->description = "Non-registered: managed";
+                }
             } else {
                 $account->description = $accountType;
             }
