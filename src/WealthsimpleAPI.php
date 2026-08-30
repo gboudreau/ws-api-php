@@ -263,9 +263,11 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $action = $act->subType === "TRANSFER_OUT" ? 'sent' : 'received';
             $security = $this->securityIdToSymbol($act->securityId);
             $act->description = "Crypto $action: " . ((float) $act->assetQuantity) . " x $security";
-        } elseif (in_array($act->type, ['DIY_BUY', 'DIY_SELL', 'MANAGED_BUY', 'MANAGED_SELL', 'CRYPTO_BUY', 'CRYPTO_SELL'])) {
+        } elseif (in_array($act->type, ['DIY_BUY', 'DIY_SELL', 'MANAGED_BUY', 'MANAGED_SELL', 'CRYPTO_BUY', 'CRYPTO_SELL', 'NEW_ISSUE_BUY'])) {
             if (string_contains($act->type, 'MANAGED')) {
                 $verb = "Managed transaction";
+            } elseif ($act->type === 'NEW_ISSUE_BUY') {
+                $verb = "IPO allocation";
             } else {
                 $verb = ucfirst(strtolower(str_replace('_', ' ', $act->subType)));
                 if (string_contains($act->type, "CRYPTO")) {
@@ -327,6 +329,9 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         } elseif ($act->type === 'DIVIDEND') {
             $security = $this->securityIdToSymbol($act->securityId);
             $act->description = "Dividend: $security";
+        } elseif ($act->type === 'STOCK_DIVIDEND') {
+            $security = $this->securityIdToSymbol($act->securityId);
+            $act->description = "Stock Dividend: $security";
         } elseif ($act->type === 'FUNDS_CONVERSION') {
             $act->description = "Funds converted: $act->currency from " . ($act->currency === 'CAD' ? 'USD' : 'CAD');
         } elseif ($act->type === 'NON_RESIDENT_TAX') {
@@ -376,6 +381,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             $act->description = "Reimbursement: Exchange-traded fund rebate";
         } elseif ($act->type === 'REIMBURSEMENT' && $act->subType === 'REWARD') {
             $act->description = "Reimbursement: Reward";
+        } elseif ($act->type === 'REIMBURSEMENT' && $act->subType === 'ATM') {
+            $act->description = "Reimbursement: ATM fee";
         } elseif ($act->type === 'INSTITUTIONAL_TRANSFER_INTENT' && $act->subType === 'TRANSFER_OUT') {
             $act->description = "Institutional transfer: transfer to $act->institutionName";
         } elseif ($act->type === 'SPEND' && $act->subType === 'PREPAID') {
