@@ -37,6 +37,8 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         case 'FetchDividendsV2': return "query FetchDividendsV2(\$identityId: ID!, \$currency: Currency!, \$accountIds: [ID!], \$startDate: Date, \$accountScope: AccountScope = OWN, \$includeIssuingSecurityBreakdown: Boolean = false) {\n  identity(id: \$identityId) {\n    id\n    financials(filter: {accounts: \$accountIds}, accountScope: \$accountScope) {\n      dividendsV2(startDate: \$startDate, currency: \$currency) {\n        totalValue { amount cents currency }\n        issuingSecurityBreakdown @include(if: \$includeIssuingSecurityBreakdown) {\n          security {\n            id\n            stock { name symbol }\n          }\n          totalValue { amount cents currency }\n        }\n      }\n    }\n  }\n}";
         case 'FetchIntraDayChartQuotes': return "query FetchIntraDayChartQuotes(\$id: ID!, \$date: Date, \$tradingSession: TradingSession, \$currency: Currency, \$period: ChartPeriod) {\n  security(id: \$id) {\n    id\n    ...IntraDayChartQuotes\n    __typename\n  }\n}\n\nfragment IntraDayChartQuotes on Security {\n  chartBarQuotes(\n    date: \$date\n    tradingSession: \$tradingSession\n    currency: \$currency\n    period: \$period\n  ) {\n    securityId\n    price\n    sessionPrice\n    timestamp\n    currency\n    marketStatus\n    __typename\n  }\n  __typename\n}";
         case 'FetchSecurityDividendDetails': return "query FetchSecurityDividendDetails(\$securityId: ID!, \$currency: Currency) {\n  security(id: \$securityId) {\n    id\n    currency\n    fundamentals(currency: \$currency) {\n      yield\n      __typename\n    }\n    events {\n      exDividendDate\n      payableDate\n      recordDate\n      __typename\n    }\n    stock {\n      dividendFrequency\n      __typename\n    }\n    __typename\n  }\n}";
+        case 'FetchIdentityNetWorthAccounts': return "query FetchIdentityNetWorthAccounts(\$identityId: ID!, \$pageSize: Int = 100, \$cursor: String, \$filter: AccountsFilter = {archived: false, closed: false}) {\n  identity(id: \$identityId) {\n    id\n    household {\n      id\n      members { id __typename }\n      __typename\n    }\n    netWorth {\n      corporations { ...CorporationNetWorthFields __typename }\n      accounts(filter: \$filter, first: \$pageSize, after: \$cursor) {\n        edges { node { ...InternalAccountFields __typename } __typename }\n        pageInfo { endCursor hasNextPage __typename }\n        __typename\n      }\n      externalFinancialEntities {\n        ... on ExternalFinancialEntity { ...ExternalFinancialEntityFields __typename }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}\n\nfragment CorporationNetWorthFields on NetWorthCorporation {\n  id\n  soleOwner\n  __typename\n}\n\nfragment InternalAccountFields on Account {\n  accountOwnerConfiguration\n  archivedAt\n  closedAt\n  currency\n  id\n  nickname\n  unifiedAccountType\n  linkedAccount { id __typename }\n  custodianAccounts { id status branch __typename }\n  accountEntityRelationships { entityCanonicalId entityType __typename }\n  accountFeatures { enabled functional name firstEnabledOn __typename }\n  accountOwners { accountId accountNickname identityId name ownershipType accountOpeningAgreementsSigned __typename }\n  accountVisibility { household canUpdateHousehold isConfirmed __typename }\n  financials {\n    currentCombined {\n      id\n      netLiquidationValueV2 { amount cents currency __typename }\n      creditCard { current { cents currency __typename } __typename }\n      __typename\n    }\n    __typename\n  }\n  __typename\n}\n\nfragment ExternalFinancialEntityFields on ExternalFinancialEntity {\n  accountNumberLast4\n  accountNumberHash\n  aggregatorLink { id aggregator error { type __typename } __typename }\n  aggregatorLinkId\n  balance: currentBalance { amount currency __typename }\n  balanceAsOf: currentBalanceAsOf\n  updatedAt\n  currency\n  ownershipType\n  displayName: name\n  entityType\n  id: canonicalId\n  identityId\n  institutionName\n  institutionLogo\n  visibility { household __typename }\n  __typename\n  ... on MortgageExternalFinancialEntity {\n    interestRate\n    monthlyPayment { amount __typename }\n    remainingAmortizationMonths\n    __typename\n  }\n}";
+        case 'FetchIdentityNetWorthFinancials': return "query FetchIdentityNetWorthFinancials(\$identityId: ID!, \$accountIds: [ID!]!, \$externalFinancialEntityIds: [ID!]!, \$currency: Currency!, \$startDate: Date!, \$endDate: Date, \$first: Int, \$accountScope: AccountScope!) {\n  identity(id: \$identityId) {\n    id\n    netWorth {\n      financials(accountScope: \$accountScope, filter: {accounts: \$accountIds, externalFinancialEntities: \$externalFinancialEntityIds}) {\n        current(currency: \$currency) {\n          id\n          balance { amount currency __typename }\n          __typename\n        }\n        historicalDaily(currency: \$currency, startDate: \$startDate, endDate: \$endDate, first: \$first) {\n          edges { node { date balance { amount currency __typename } __typename } __typename }\n          pageInfo { hasNextPage hasPreviousPage startCursor endCursor __typename }\n          __typename\n        }\n        __typename\n      }\n      __typename\n    }\n    __typename\n  }\n}";
         };
     }
 
@@ -85,7 +87,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         "PORTFOLIO_LINE_OF_CREDIT" => "Portfolio line of credit",
     ];
 
-    private function _accountAddDescription($account) {
+    protected function _accountAddDescription($account) {
         $account->number = $account->id;
         // This is the account number visible in the WS app:
         foreach ($account->custodianAccounts as $ca) {
@@ -183,6 +185,71 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
             'array',
             NULL,
         );
+    }
+
+    /**
+     * Return the internal and external accounts included in net worth calculations.
+     */
+    public function getNetWorthAccounts(): object {
+        $result = $this->doGraphQLQuery(
+            'FetchIdentityNetWorthAccounts',
+            [
+                'identityId' => $this->getTokenInfo()->identity_canonical_id,
+                'pageSize' => 100,
+                'filter' => [
+                    'archived' => FALSE,
+                    'closed' => FALSE,
+                ],
+            ],
+            'identity.netWorth',
+            'object',
+        );
+
+        $accounts = array_map(fn($edge) => $edge->node, $result->accounts->edges);
+        array_walk($accounts, fn($account) => $this->_accountAddDescription($account));
+
+        return (object) [
+            'accounts' => $accounts,
+            'externalFinancialEntities' => $result->externalFinancialEntities,
+        ];
+    }
+
+    /**
+     * Return current and historical net worth for owned or household accounts.
+     */
+    public function getNetWorthWithHistory(string $account_scope = 'HOUSEHOLD', string $currency = 'CAD', ?string $start_date = NULL, ?string $end_date = NULL, ?array $account_ids = NULL, ?array $external_entity_ids = NULL): object {
+        $end_date = static::dateFormatISO($end_date ?? 'today');
+        $start_date = static::dateFormatISO($start_date ?? "$end_date -30 days");
+
+        if ($account_ids === NULL || $external_entity_ids === NULL) {
+            $net_worth_accounts = $this->getNetWorthAccounts();
+            if ($account_ids === NULL) {
+                $account_ids = array_map(fn($account) => $account->id, $net_worth_accounts->accounts);
+            }
+            if ($external_entity_ids === NULL) {
+                $external_entity_ids = array_map(fn($account) => $account->id, $net_worth_accounts->externalFinancialEntities);
+            }
+        }
+
+        $result = $this->doGraphQLQuery(
+            'FetchIdentityNetWorthFinancials',
+            [
+                'identityId' => $this->getTokenInfo()->identity_canonical_id,
+                'accountIds' => $account_ids,
+                'externalFinancialEntityIds' => $external_entity_ids,
+                'accountScope' => $account_scope,
+                'currency' => $currency,
+                'startDate' => $start_date,
+                'endDate' => $end_date,
+            ],
+            'identity.netWorth.financials',
+            'object',
+        );
+
+        return (object) [
+            'balance' => $result->current->balance,
+            'historicalDaily' => array_map(fn($edge) => $edge->node, $result->historicalDaily->edges),
+        ];
     }
 
     /**

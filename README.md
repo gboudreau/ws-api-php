@@ -83,6 +83,15 @@ $sec_info_setter_fn = function (string $ws_security_id, object $market_data) {
 $ws->setSecurityMarketDataCache($sec_info_getter_fn, $sec_info_setter_fn);
 
 // 4. Use the API object to access your WS accounts
+$net_worth = $ws->getNetWorthWithHistory('HOUSEHOLD', 'CAD');
+echo "Household Net Worth: $" . number_format($net_worth->balance->amount, 2) . "\n";
+
+$net_worth_accounts = $ws->getNetWorthAccounts();
+foreach ($net_worth_accounts->accounts as $account) {
+    $value = $account->financials->currentCombined->netLiquidationValueV2->amount;
+    echo "  - $account->description ($account->id) = $" . number_format($value, 2) . "\n";
+}
+
 $accounts = $ws->getAccounts();
 
 echo "All Accounts Historical Value & Gains:\n";
