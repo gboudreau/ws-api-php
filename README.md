@@ -49,7 +49,9 @@ if (!file_exists(__DIR__ . "/session-$username.json")) {
             if (empty($password)) {
                 $password = readline("Password: ");
             }
-            WealthsimpleAPI::login($username, $password, $totp_code, $persist_session_fct);
+            WealthsimpleAPI::login($username, $password, $totp_code, $persist_session_fct, WealthsimpleAPI::SCOPE_READ_ONLY, function () {
+                echo "Approve the login in the Wealthsimple mobile app.\n";
+            });
             // The above will throw exceptions if login failed
             // So we break (out of the login while(true) loop) on success:
             break;
@@ -174,6 +176,11 @@ foreach ($accounts as $account) {
     echo "\n";
 }
 ```
+
+When mobile approval is required, login polls for up to two minutes and retries
+automatically after approval. Without an approval callback, it emits a warning.
+If a TOTP code is required, login throws `OTPRequiredException`; obtain the code
+and retry with `$otp_answer` as shown above.
 
 If you'd like to implement your own GraphQL queries, you can do so by extending the `WealthsimpleAPI` class and overriding the `getGraphQLQuery` method, like so:
 ```php

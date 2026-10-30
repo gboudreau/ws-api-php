@@ -43,12 +43,19 @@ abstract class WealthsimpleAPIBase
         }
 
         $is_oauth = strpos($url, static::OAUTH_BASE_URL) !== FALSE;
-        if ($is_oauth) {
+        if ($is_oauth || $url === 'https://api.production.wealthsimple.com/v1/login_challenge') {
             if (!empty($this->session->session_id)) {
                 $headers[] = "x-ws-session-id: {$this->session->session_id}";
             }
         }
-        if (!empty($this->session->access_token) && @$data->grant_type !== 'refresh_token') {
+        $has_authorization = FALSE;
+        foreach ($headers as $header) {
+            if (stripos($header, 'Authorization:') === 0) {
+                $has_authorization = TRUE;
+                break;
+            }
+        }
+        if (!empty($this->session->access_token) && !in_array($data->grant_type ?? NULL, ['refresh_token', 'client_credentials'], TRUE) && !$has_authorization) {
             $headers[] = "Authorization: Bearer {$this->session->access_token}";
         }
         if (!empty($this->session->wssdi)) {
@@ -290,12 +297,27 @@ abstract class WealthsimpleAPIBase
      * @param string|null   $otp_answer          2FA code, if required
      * @param callable|null $persist_session_fct Function to persist the session object, upon successful login. Will receive a two parameters: the session object, which you can JSON-encode to persist, and the username. Careful! This object contains sensitive tokens.
      * @param string        $scope               Scope to request; See WealthsimpleAPI::SCOPE_*; Default to SCOPE_READ_ONLY.
+     * @param callable|null $approval_callback   Called when mobile approval is required.
      *
      * @return WSAPISession On success, the session object is returned. You should store this object in your database for future use.
      * @throws LoginFailedException
      * @throws OTPRequiredException
      */
-    private function loginInternal(string $username, string $password, ?string $otp_answer = NULL, ?callable $persist_session_fct = NULL, string $scope = self::SCOPE_READ_ONLY) : WSAPISession {
+    private function loginInternal(string $username, string $password, ?string $otp_answer = NULL, ?callable $persist_session_fct = NULL, string $scope = self::SCOPE_READ_ONLY, ?callable $approval_callback = NULL) : WSAPISession {
+        $client_response = json_decode(
+            $this->sendPOST(
+                static::OAUTH_BASE_URL . '/token',
+                (object) [
+                    'grant_type' => 'client_credentials',
+                    'scope' => 'read',
+                    'client_id' => $this->session->client_id,
+                ]
+            )
+        );
+        if (empty($client_response->access_token)) {
+            throw new LoginFailedException('Client credentials failed', 0, $client_response);
+        }
+        $client_token = $client_response->access_token;
         $data = (object) [
             'grant_type'     => 'password',
             'username'       => $username,
@@ -305,12 +327,39 @@ abstract class WealthsimpleAPIBase
             'client_id'      => $this->session->client_id,
             'otp_claim'      => NULL,
         ];
-        $headers = ["x-wealthsimple-client: @wealthsimple/wealthsimple", "x-ws-profile: undefined"];
+        $headers = ["x-wealthsimple-client: @wealthsimple/wealthsimple", "x-ws-profile: undefined", "Authorization: Bearer $client_token"];
         if (!empty($otp_answer)) {
             $headers[] = "x-wealthsimple-otp: $otp_answer;remember=true";
         }
         $response = $this->sendPOST(static::OAUTH_BASE_URL . '/token', $data, $headers);
         $response = json_decode($response);
+
+        if (($response->error ?? NULL) === 'login_challenge_required' && ($response->purpose ?? NULL) === 'login_approval' && !empty($response->login_challenge_id)) {
+            if ($approval_callback) {
+                $approval_callback();
+            } else {
+                trigger_error('Approve the login in the Wealthsimple mobile app.', E_USER_WARNING);
+            }
+            $challenge_header = "x-wealthsimple-login-challenge-id: {$response->login_challenge_id}";
+            $deadline = hrtime(TRUE) / 1e9 + 120;
+            while (TRUE) {
+                $challenge = json_decode($this->sendGET('https://api.production.wealthsimple.com/v1/login_challenge', ["Authorization: Bearer $client_token", $challenge_header]));
+                if (($challenge->status ?? NULL) === 'approved') {
+                    break;
+                }
+                if (($challenge->status ?? NULL) !== 'pending') {
+                    throw new LoginFailedException('Login approval failed', 0, $challenge);
+                }
+                $remaining = $deadline - hrtime(TRUE) / 1e9;
+                if ($remaining <= 0) {
+                    throw new LoginFailedException('Login approval timed out', 0, $challenge);
+                }
+                sleep(5);
+            }
+            $retry_headers = array_values(array_filter($headers, fn($header) => stripos($header, 'x-wealthsimple-otp:') !== 0));
+            $retry_headers[] = $challenge_header;
+            $response = json_decode($this->sendPOST(static::OAUTH_BASE_URL . '/token', $data, $retry_headers));
+        }
 
         if (@$response->error === 'invalid_grant' && empty($otp_answer)) {
             throw new OTPRequiredException("2FA code required");
@@ -418,14 +467,15 @@ abstract class WealthsimpleAPIBase
      * @param string|null   $otp_answer          2FA code, if required
      * @param callable|null $persist_session_fct Function to persist the session object, upon successful login.
      * @param string        $scope               Scope to request; See WealthsimpleAPI::SCOPE_*; Default to SCOPE_READ_ONLY.
+     * @param callable|null $approval_callback   Called when mobile approval is required.
      *
      * @return void
      * @throws LoginFailedException
      * @throws OTPRequiredException
      */
-    public static function login(string $username, string $password, ?string $otp_answer = NULL, ?callable $persist_session_fct = NULL, string $scope = self::SCOPE_READ_ONLY) : WSAPISession {
+    public static function login(string $username, string $password, ?string $otp_answer = NULL, ?callable $persist_session_fct = NULL, string $scope = self::SCOPE_READ_ONLY, ?callable $approval_callback = NULL) : WSAPISession {
         $ws = new WealthsimpleAPI();
-        return $ws->loginInternal($username, $password, $otp_answer, $persist_session_fct, $scope);
+        return $ws->loginInternal($username, $password, $otp_answer, $persist_session_fct, $scope, $approval_callback);
     }
 
     /**
