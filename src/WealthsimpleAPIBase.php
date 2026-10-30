@@ -88,7 +88,7 @@ abstract class WealthsimpleAPIBase
         if (!$result) {
             $errno = curl_errno($ch);
             $err = curl_error($ch);
-            curl_close($ch);
+            unset($ch);
             if ($cookie_jar !== NULL) {
                 @unlink($cookie_jar);
             }
@@ -96,13 +96,11 @@ abstract class WealthsimpleAPIBase
         }
 
         if ($return_cookies) {
+            unset($ch);
             $cookies = self::parseCookieJar($cookie_jar);
             @unlink($cookie_jar);
-            curl_close($ch);
             return (object) ['body' => $result, 'cookies' => $cookies];
         }
-
-        curl_close($ch);
 
         return $result;
     }

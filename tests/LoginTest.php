@@ -13,7 +13,7 @@ namespace PPFinances\Wealthsimple {
     }
     function curl_close($ch) {}
     function hrtime($as_number = FALSE) { global $clock; return $clock * 1000000000; }
-    function usleep($microseconds) { global $clock; $clock += $microseconds / 1000000; }
+    function sleep($seconds) { global $clock; $clock += $seconds; return 0; }
 }
 
 namespace {
@@ -33,9 +33,8 @@ namespace {
         $session = new WSAPISession();
         $session->client_id = 'client'; $session->session_id = 'session'; $session->wssdi = 'device'; $session->access_token = 'old-token';
         $property = new \ReflectionProperty(\PPFinances\Wealthsimple\WealthsimpleAPIBase::class, 'session');
-        $property->setAccessible(TRUE); $property->setValue($api, $session);
+        $property->setValue($api, $session);
         $method = new \ReflectionMethod(\PPFinances\Wealthsimple\WealthsimpleAPIBase::class, 'loginInternal');
-        $method->setAccessible(TRUE);
         return $method->invoke($api, 'user', 'pass', $otp, $persist, WealthsimpleAPI::SCOPE_READ_ONLY, $callback);
     }
 

@@ -152,7 +152,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         return $balances;
     }
 
-    public function getAccountHistoricalFinancials(string $account_id, string $currency, string $start_date = NULL, string $end_date = NULL, string $resolution = 'WEEKLY', int $first = NULL, string $cursor = NULL): array {
+    public function getAccountHistoricalFinancials(string $account_id, string $currency, ?string $start_date = NULL, ?string $end_date = NULL, string $resolution = 'WEEKLY', ?int $first = NULL, ?string $cursor = NULL): array {
         return $this->doGraphQLQuery(
             'FetchAccountHistoricalFinancials',
             [
@@ -169,7 +169,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
         );
     }
 
-    public function getIdentityHistoricalFinancials(array $account_ids = [], string $currency = 'CAD', string $start_date = NULL, string $end_date = NULL, int $first = NULL, string $cursor = NULL): array {
+    public function getIdentityHistoricalFinancials(array $account_ids = [], string $currency = 'CAD', ?string $start_date = NULL, ?string $end_date = NULL, ?int $first = NULL, ?string $cursor = NULL): array {
         return $this->doGraphQLQuery(
             'FetchIdentityHistoricalFinancials',
             [
@@ -267,7 +267,7 @@ class WealthsimpleAPI extends WealthsimpleAPIBase
      * @throws Exceptions\UnexpectedException
      * @throws WSApiException If the response format is unexpected.
      */
-    public function getActivities($account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, string $start_date = NULL, string $end_date = NULL, bool $load_all_pages = TRUE): array {
+    public function getActivities($account_id, int $how_many = 50, string $order_by = 'OCCURRED_AT_DESC', bool $ignore_rejected = TRUE, ?string $start_date = NULL, ?string $end_date = NULL, bool $load_all_pages = TRUE): array {
         $filter_fn = function ($act) use ($ignore_rejected) {
             if ($act->type === 'LEGACY_TRANSFER') {
                 // Never return those
