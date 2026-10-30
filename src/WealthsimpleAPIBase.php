@@ -214,7 +214,24 @@ abstract class WealthsimpleAPIBase
             }
 
             if (!$this->session->wssdi) {
-                throw new UnexpectedException("Couldn't find wssdi in login page response headers.");
+                // Look for --wssdi=... in CLI $arg, or ?wssdi=... in URL parameters
+                if (!empty($_GET['wssdi']) && is_string($_GET['wssdi']) && preg_match('/^[a-f0-9-]+$/iD', $_GET['wssdi'])) {
+                    $this->session->wssdi = $_GET['wssdi'];
+                } else {
+                    $argv = $GLOBALS['argv'] ?? [];
+                    if (!empty($argv)) {
+                        foreach ($argv as $arg) {
+                            if (preg_match('/^--wssdi=([a-f0-9-]+)$/i', $arg, $re)) {
+                                $this->session->wssdi = $re[1];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!$this->session->wssdi) {
+                throw new UnexpectedException("Couldn't find wssdi in login page response. Open a new browser at https://my.wealthsimple.com/app/login, grab the wssdi cookie, and use with with either ?wssdi=... in your URL, or --wssdi=... in a CLI command.");
             }
         }
         if (empty($this->session->client_id)) {
