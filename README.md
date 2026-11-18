@@ -2,6 +2,7 @@ Unofficial Wealthsimple API Library for PHP
 ===========================================
 
 This library allows you to access your own account using the Wealthsimple (GraphQL) API using PHP.
+Sign in with an existing passkey or with your email, password, and any required two-factor authentication.
 
 Installation
 ------------
@@ -34,39 +35,66 @@ $persist_session_fct = function (WSAPISession $session, string $username) {
 // If you want, you can set a custom User-Agent for the requests to the WealthSimple API:
 WealthsimpleAPI::setUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36");
 
-// 2. If it's the first time you run this, create a new session using the username & password (and TOTP answer, if needed). Do NOT save those infos in your code!
-$username = readline("Wealthsimple username (email): ");
-if (!file_exists(__DIR__ . "/session-$username.json")) {
+// 2. Pick a local session name and reuse a saved session, or sign in interactively.
+while (true) {
+    if (empty($username)) {
+        $username = readline("Wealthsimple email: ");
+        if ($username === false || trim($username) === '' || strpbrk($username, '/\\') !== false) {
+            throw new RuntimeException('Enter a valid local session name.');
+        }
+    }
+    $path = __DIR__ . "/session-$username.json";
+    if (file_exists($path)) {
+        $session = json_decode(file_get_contents($path), flags: JSON_THROW_ON_ERROR);
+        break;
+    }
+    $choice = readline("Use a passkey to log in? [Y/n]: ");
+    if ($choice === false) {
+        throw new RuntimeException('Login cancelled.');
+    }
+    if (in_array(strtolower(trim($choice)), ['', 'y', 'yes'], true)) {
+        try {
+            $session = WealthsimpleAPI::loginWithPasskey(
+                $username,
+                [WealthsimpleAPI::class, 'passkeyChromeAssertion'],
+                $persist_session_fct,
+            );
+            break;
+        } catch (LoginFailedException $e) {
+            error_log('Passkey login failed: ' . $e->getMessage());
+            continue;
+        }
+    }
+    if (empty($password)) {
+        $password = readline("Password: ");
+    }
+    if ($password === false) {
+        throw new RuntimeException('Login cancelled.');
+    }
     $totp_code = null;
     while (true) {
         try {
-            if (empty($username)) {
-                $username = readline("Wealthsimple username (email): ");
-                if (file_exists(__DIR__ . "/session-$username.json")) {
-                    break;
-                }
-            }
-            if (empty($password)) {
-                $password = readline("Password: ");
-            }
-            WealthsimpleAPI::login($username, $password, $totp_code, $persist_session_fct, WealthsimpleAPI::SCOPE_READ_ONLY, function () {
+            $session = WealthsimpleAPI::login($username, $password, $totp_code, $persist_session_fct, WealthsimpleAPI::SCOPE_READ_ONLY, function () {
                 echo "Approve the login in the Wealthsimple mobile app.\n";
             });
             // The above will throw exceptions if login failed
             // So we break (out of the login while(true) loop) on success:
-            break;
+            break 2;
         } catch (OTPRequiredException $e) {
             $totp_code = readline("TOTP code: ");
+            if ($totp_code === false) {
+                throw new RuntimeException('Login cancelled.');
+            }
         } catch (LoginFailedException $e) {
             error_log("Login failed. Try again.");
             $username = null;
             $password = null;
+            break;
         }
     }
 }
 
-// 3. Load the session object, and use it to instantiate the API object
-$session = json_decode(file_get_contents(__DIR__ . "/session-$username.json"));
+// 3. Use the session to instantiate the API object
 $ws = WealthsimpleAPI::fromToken($session, $persist_session_fct, $username);
 // $persist_session_fct is needed here too, because the session may be updated if the access token expired, and thus this function will be called to save the new session
 
@@ -177,7 +205,7 @@ foreach ($accounts as $account) {
 }
 ```
 
-When mobile approval is required, login polls for up to two minutes and retries
+When mobile approval is required, password login polls for up to two minutes and retries
 automatically after approval. Without an approval callback, it emits a warning.
 If a TOTP code is required, login throws `OTPRequiredException`; obtain the code
 and retry with `$otp_answer` as shown above.

@@ -15,6 +15,7 @@ const LOAD_ALL_PAGES = TRUE;
 abstract class WealthsimpleAPIBase
 {
     protected const OAUTH_BASE_URL  = 'https://api.production.wealthsimple.com/v1/oauth/v2';
+    private const PASSKEY_OPTIONS_URL = 'https://api.production.wealthsimple.com/v1/webauthn/authentication/options';
     protected const GRAPHQL_URL     = 'https://my.wealthsimple.com/graphql';
     protected const GRAPHQL_VERSION = '12';
 
@@ -33,17 +34,17 @@ abstract class WealthsimpleAPIBase
         return vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
     }
 
-    private function sendHttpRequest(string $url, $method = 'POST', $data = NULL, array $headers = [], bool $return_headers = FALSE, bool $return_cookies = FALSE) {
+    private function sendHttpRequest(string $url, $method = 'POST', $data = NULL, array $headers = [], bool $return_headers = FALSE, bool $return_cookies = FALSE, bool $return_status = FALSE) {
         $ch = curl_init();
 
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, TRUE);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $data === NULL ? '' : json_encode($data));
             $headers[] = 'Content-Type: application/json';
         }
 
         $is_oauth = strpos($url, static::OAUTH_BASE_URL) !== FALSE;
-        if ($is_oauth || $url === 'https://api.production.wealthsimple.com/v1/login_challenge') {
+        if ($is_oauth || $url === self::PASSKEY_OPTIONS_URL || $url === 'https://api.production.wealthsimple.com/v1/login_challenge') {
             if (!empty($this->session->session_id)) {
                 $headers[] = "x-ws-session-id: {$this->session->session_id}";
             }
@@ -100,6 +101,10 @@ abstract class WealthsimpleAPIBase
             $cookies = self::parseCookieJar($cookie_jar);
             @unlink($cookie_jar);
             return (object) ['body' => $result, 'cookies' => $cookies];
+        }
+
+        if ($return_status) {
+            return (object) ['body' => $result, 'status' => curl_getinfo($ch, CURLINFO_RESPONSE_CODE)];
         }
 
         return $result;
@@ -221,12 +226,12 @@ abstract class WealthsimpleAPIBase
         }
         if (empty($this->session->client_id)) {
             if (!empty($app_js_url)) {
-            $resp = $this->sendGET($app_js_url, [], FALSE, TRUE);
-            foreach (explode("\n", str_replace("\r", "", $resp->body)) as $line) {
-                if (preg_match('/"production"[^}]*clientId:"([a-f0-9]+)"/i', $line, $re)) {
-                    $this->session->client_id = $re[1];
+                $resp = $this->sendGET($app_js_url, [], FALSE, TRUE);
+                foreach (explode("\n", str_replace("\r", "", $resp->body)) as $line) {
+                    if (preg_match('/"production"[^}]*clientId:"([a-f0-9]+)"/i', $line, $re)) {
+                        $this->session->client_id = $re[1];
+                    }
                 }
-            }
             }
             if (!$this->session->client_id) {
                 error_log("Using hard-coded client_id, because app JS URL could not be loaded. This might cause an authentication failure.");
@@ -278,9 +283,7 @@ abstract class WealthsimpleAPIBase
             if (!empty($response->access_token)) {
                 $this->session->access_token = $response->access_token;
                 $this->session->refresh_token = $response->refresh_token;
-                if ($persist_session_fct) {
-                    $persist_session_fct($this->session, $username);
-                }
+                $this->persistSession($persist_session_fct, $username);
                 return;
             }
             // Failed to refresh access token
@@ -290,6 +293,166 @@ abstract class WealthsimpleAPIBase
 
     public const SCOPE_READ_ONLY  = 'invest.read trade.read tax.read';
     public const SCOPE_READ_WRITE = 'invest.read trade.read tax.read invest.write trade.write tax.write';
+
+    private function persistSession(?callable $callback, ?string $username) : void {
+        if ($callback !== NULL) {
+            $callback($this->session, $username);
+        }
+    }
+
+    /**
+     * Log in with an existing passkey using Wealthsimple's private web API.
+     * The authenticator is given a WebAuthn options object and must return a decoded
+     * assertion (object or associative array), or NULL to cancel.
+     * The optional persistence callback receives the session object and the local
+     * session name ($username), which is not sent to Wealthsimple.
+     *
+     * @throws LoginFailedException
+     */
+    public static function loginWithPasskey(?string $username, callable $get_assertion, ?callable $persist_session_fct = NULL, string $scope = self::SCOPE_READ_ONLY) : WSAPISession {
+        try {
+            $ws = new WealthsimpleAPI();
+        } catch (CurlException | UnexpectedException $e) {
+            throw new LoginFailedException('Could not initialize the Wealthsimple passkey session.', 0);
+        }
+        $token_url = static::OAUTH_BASE_URL . '/token';
+        $post = static function (string $url, ?object $data, array $headers, string $failure) use ($ws) : object {
+            try {
+                $response = $ws->sendHttpRequest($url, 'POST', $data, $headers, return_status: TRUE);
+            } catch (CurlException $e) {
+                throw new LoginFailedException($failure, 0);
+            }
+            $body = json_decode($response->body);
+            if (($body->error ?? NULL) === 'login_challenge_required') {
+                throw new LoginFailedException('Wealthsimple requires additional approval; use the regular login flow.', 0);
+            }
+            if ($response->status < 200 || $response->status >= 300 || !is_object($body) || property_exists($body, 'error')) {
+                throw new LoginFailedException($failure, 0);
+            }
+            return $body;
+        };
+
+        $client = $post($token_url, (object) [
+            'grant_type' => 'client_credentials',
+            'scope' => 'read',
+            'client_id' => $ws->session->client_id,
+        ], [], 'Could not obtain the Wealthsimple app token.');
+        $app_token = $client->access_token ?? NULL;
+        if (!is_string($app_token) || $app_token === '') {
+            throw new LoginFailedException('Wealthsimple did not return an app token.', 0);
+        }
+
+        $headers = ['x-wealthsimple-client: @wealthsimple/wealthsimple'];
+        $challenge = $post(self::PASSKEY_OPTIONS_URL, NULL, [...$headers, "Authorization: Bearer $app_token"],
+            'Could not request a Wealthsimple passkey challenge.');
+        $options = $challenge->options ?? NULL;
+        $key = $challenge->challenge_key ?? NULL;
+        if (!is_object($options) || !is_string($options->challenge ?? NULL) || $options->challenge === '' || !is_string($key) || $key === '') {
+            throw new LoginFailedException('Wealthsimple returned invalid passkey options.', 0);
+        }
+
+        $assertion = $get_assertion($options);
+        $credential = (array) $assertion;
+        $proof = (array) ($credential['response'] ?? NULL);
+        if (($credential['type'] ?? NULL) !== 'public-key') {
+            throw new LoginFailedException('No valid passkey assertion was provided.', 0);
+        }
+        foreach ([$credential['id'] ?? NULL, $credential['rawId'] ?? NULL, $proof['authenticatorData'] ?? NULL,
+            $proof['clientDataJSON'] ?? NULL, $proof['signature'] ?? NULL] as $field) {
+            if (!is_string($field) || $field === '') {
+                throw new LoginFailedException('No valid passkey assertion was provided.', 0);
+            }
+        }
+
+        $tokens = $post($token_url, (object) [
+            'grant_type' => 'webauthn',
+            'challenge_key' => $key,
+            'webauthn_credential' => $assertion,
+            'skip_provision' => TRUE,
+            'redirect_uri' => 'https://my.wealthsimple.com/app/login',
+            'scope' => $scope,
+            'client_id' => $ws->session->client_id,
+        ], [...$headers, 'x-ws-profile: undefined'], 'Wealthsimple rejected the passkey exchange. Restart for a fresh challenge.');
+        if (!is_string($tokens->token_type ?? NULL) || strcasecmp($tokens->token_type, 'Bearer') !== 0) {
+            throw new LoginFailedException('The passkey exchange did not return a bearer token.', 0);
+        }
+        // OAuth may omit scope when it matches the request.
+        if (property_exists($tokens, 'scope') && (!is_string($tokens->scope) || array_diff(
+            preg_split('/\s+/', $tokens->scope, -1, PREG_SPLIT_NO_EMPTY),
+            preg_split('/\s+/', $scope, -1, PREG_SPLIT_NO_EMPTY)
+        ))) {
+            throw new LoginFailedException('The passkey exchange returned unexpected scopes.', 0);
+        }
+        $access = $tokens->access_token ?? NULL;
+        $refresh = $tokens->refresh_token ?? NULL;
+        if (!is_string($access) || $access === '' || !is_string($refresh) || $refresh === '') {
+            throw new LoginFailedException('The passkey exchange did not return reusable session tokens.', 0);
+        }
+        $ws->session->access_token = $access;
+        $ws->session->refresh_token = $refresh;
+        $ws->persistSession($persist_session_fct, $username);
+        return $ws->session;
+    }
+
+    /** Prompt for a Chrome WebAuthn assertion without echoing it. Requires a CLI terminal with stty. */
+    public static function passkeyChromeAssertion(object $options) : ?object {
+        $terminal_error = 'Run passkey login in a terminal that can hide input.';
+        if (PHP_SAPI !== 'cli' || !function_exists('exec') || !stream_isatty(STDIN)) {
+            throw new LoginFailedException($terminal_error, 0);
+        }
+        $options_literal = json_encode(json_encode($options, JSON_THROW_ON_ERROR), JSON_THROW_ON_ERROR);
+        echo <<<JS
+Run this snippet in Chrome DevTools Console on https://my.wealthsimple.com/app/login:
+
+(async () => {
+  if (location.origin !== 'https://my.wealthsimple.com') {
+    throw new Error('Open the official Wealthsimple sign-in page first.');
+  }
+  const copyAssertion = copy;
+  const publicKey = PublicKeyCredential.parseRequestOptionsFromJSON(JSON.parse($options_literal));
+  const credential = await navigator.credentials.get({ publicKey });
+  if (!credential) throw new Error('No passkey assertion.');
+  copyAssertion(JSON.stringify(credential.toJSON()));
+  console.info('Assertion copied. Paste it into your local terminal prompt now.');
+})();
+
+JS;
+
+        $mode = exec('stty -g 2>/dev/null', $output, $status);
+        if ($status !== 0 || !$mode) {
+            throw new LoginFailedException($terminal_error, 0);
+        }
+        try {
+            // Read past the terminal's canonical line limit and handle Ctrl-C as cancellation.
+            exec('stty -echo -echonl -icanon -isig min 1 time 0 2>/dev/null', $output, $status);
+            if ($status !== 0) {
+                throw new LoginFailedException($terminal_error, 0);
+            }
+            fwrite(STDERR, "\nPaste the one-time assertion (input hidden), then hit [return]: ");
+            $value = '';
+            while (($char = fgetc(STDIN)) !== FALSE && $char !== "\n" && $char !== "\r") {
+                if ($char === "\x03" || $char === "\x04") {
+                    return NULL;
+                }
+                if ($char === "\x7f" || $char === "\x08") {
+                    $value = substr($value, 0, -1);
+                } else {
+                    $value .= $char;
+                }
+            }
+        } finally {
+            exec('stty ' . escapeshellarg($mode) . ' 2>/dev/null');
+            fwrite(STDERR, "\n");
+        }
+        if (trim($value) === '') {
+            return NULL;
+        }
+        $assertion = json_decode($value);
+        if (!is_object($assertion)) {
+            throw new LoginFailedException('The pasted assertion was not a JSON object.', 0);
+        }
+        return $assertion;
+    }
 
     /**
      * Login on the Wealthsimple API using the provided credentials.
@@ -373,9 +536,7 @@ abstract class WealthsimpleAPIBase
         $this->session->access_token = $response->access_token;
         $this->session->refresh_token = $response->refresh_token;
 
-        if ($persist_session_fct) {
-            $persist_session_fct($this->session, $username);
-        }
+        $this->persistSession($persist_session_fct, $username);
 
         return $this->session;
     }
@@ -481,11 +642,11 @@ abstract class WealthsimpleAPIBase
     }
 
     /**
-     * Access the Wealthsimple API using an existing session object, returned by a previous call to login().
+     * Access the Wealthsimple API using a session returned by login() or loginWithPasskey().
      *
      * @param object        $session             Session object
      * @param callable|null $persist_session_fct Function to persist the session object, upon successful login. Will receive a two parameters: the session object, which you can JSON-encode to persist, and the username. Careful! This object contains sensitive tokens.
-     * @param string|null   $username            Wealthsimple username (email address). Will be passed as the second parameter when calling $persist_session_fct.
+     * @param string|null   $username            Username or local session name passed to $persist_session_fct.
      *
      * @return WealthsimpleAPI
      * @throws ManualLoginRequired
