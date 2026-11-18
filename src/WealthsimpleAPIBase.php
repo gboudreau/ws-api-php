@@ -212,38 +212,25 @@ abstract class WealthsimpleAPIBase
             }
 
             if (!$this->session->wssdi) {
-                // Look for --wssdi=... in CLI $arg, or ?wssdi=... in URL parameters
-                if (!empty($_GET['wssdi']) && is_string($_GET['wssdi']) && preg_match('/^[a-f0-9-]+$/iD', $_GET['wssdi'])) {
-                    $this->session->wssdi = $_GET['wssdi'];
-                } else {
-                    $argv = $GLOBALS['argv'] ?? [];
-                    if (!empty($argv)) {
-                        foreach ($argv as $arg) {
-                            if (preg_match('/^--wssdi=([a-f0-9-]+)$/i', $arg, $re)) {
-                                $this->session->wssdi = $re[1];
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!$this->session->wssdi) {
-                throw new UnexpectedException("Couldn't find wssdi in login page response. Open a new browser at https://my.wealthsimple.com/app/login, grab the wssdi cookie, and use with with either ?wssdi=... in your URL, or --wssdi=... in a CLI command.");
+                // Ok, we'll just generate one ourselves!
+                $data = random_bytes(16);
+                $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
+                $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
+                $this->session->wssdi = vsprintf('%s%s-%s-%s-%s-%s%s%s', str_split(bin2hex($data), 4));
             }
         }
         if (empty($this->session->client_id)) {
-            if (empty($app_js_url)) {
-                throw new UnexpectedException("Couldn't find app JS URL in login page response body.");
-            }
+            if (!empty($app_js_url)) {
             $resp = $this->sendGET($app_js_url, [], FALSE, TRUE);
             foreach (explode("\n", str_replace("\r", "", $resp->body)) as $line) {
                 if (preg_match('/"production"[^}]*clientId:"([a-f0-9]+)"/i', $line, $re)) {
                     $this->session->client_id = $re[1];
                 }
             }
+            }
             if (!$this->session->client_id) {
-                throw new UnexpectedException("Couldn't find clientId in app JS.");
+                error_log("Using hard-coded client_id, because app JS URL could not be loaded. This might cause an authentication failure.");
+                $this->session->client_id = '4da53ac2b03225bed1550eba8e4611e086c7b905a3855e6ed12ea08c246758fa'; // Valid as of 2026-11-16 - update in the future as needed
             }
         }
     }
